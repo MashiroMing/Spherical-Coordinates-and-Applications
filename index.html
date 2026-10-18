@@ -1,0 +1,2018 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>球坐标直观学习 · 主视图与体积元</title>
+<style>
+  *{box-sizing:border-box}
+  :root{
+    --bg:#f5f7fa; --card:#ffffff; --line:#e4e9f1; --ink:#1f2937; --ink2:#4b5563;
+    --muted:#7b8798; --blue:#2563eb; --blue-bg:#eaf1fe;
+    --cyan:#0d9488; --cyan-bg:#e6f6f4;
+    --orange:#ea580c; --orange-bg:#fdf0e6;
+    --mono:Consolas,"Cascadia Mono","JetBrains Mono",monospace;
+  }
+  html,body{margin:0}
+  body{
+    background:var(--bg); color:var(--ink);
+    font:14px/1.65 -apple-system,"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1360px;margin:0 auto;padding:22px 20px 36px}
+  header h1{font-size:22px;margin:0 0 6px;font-weight:650;letter-spacing:.2px}
+  header .sub{margin:0 0 16px;color:var(--muted);font-size:13.5px;max-width:860px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px 16px;box-shadow:0 1px 2px rgba(15,31,54,.04)}
+  .card-hd{display:flex;align-items:baseline;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+  .card-hd h2{font-size:15px;margin:0;font-weight:650}
+  .hd-note{font-size:13px;color:var(--muted)}
+  .hd-reset{margin-left:auto;font-size:13px;padding:4px 10px;border:1px solid var(--line);border-radius:7px;
+            background:#fff;color:var(--ink-2);cursor:pointer;font-family:inherit}
+  .hd-reset:hover{border-color:#b9c6d8;background:#f7fafd}
+  main{display:grid;grid-template-columns:minmax(0,62fr) minmax(0,38fr);gap:16px;align-items:start}
+  .mag{grid-column:1/-1}
+
+  /* 主视图 */
+  .canvas-wrap{position:relative;height:clamp(420px,62vh,640px)}
+  #view{display:block;width:100%;height:100%;touch-action:none;cursor:grab;border-radius:10px;
+        background:linear-gradient(180deg,#fbfdff 0%,#f2f6fc 100%)}
+  #view:active{cursor:grabbing}
+  .stage-tip{position:absolute;left:12px;bottom:10px;font-size:12px;color:#8c98a8;pointer-events:none;
+             background:rgba(255,255,255,.72);padding:2px 8px;border-radius:6px}
+
+  /* 控制面板 */
+  .coords{font-family:var(--mono);font-size:13px;color:var(--ink2);background:#f7f9fc;
+          border:1px solid var(--line);border-radius:9px;padding:7px 10px;margin-bottom:12px}
+  .coords b{color:var(--ink);font-weight:600}
+  .ctrl{margin-bottom:12px}
+  .ctrl-hd{display:flex;align-items:center;gap:8px;margin-bottom:5px}
+  .ctrl-hd .sym{font:italic 16px/1 "Cambria Math","Times New Roman",serif;color:var(--ink);width:16px;text-align:center}
+  .ctrl-hd .desc{font-size:13px;color:var(--muted);flex:1}
+  .ctrl-hd .num{width:66px;font-family:var(--mono);font-size:13px;text-align:right;
+                border:1px solid #d7dfea;border-radius:7px;padding:3px 6px;background:#fff;color:var(--ink)}
+  .ctrl-hd .num:focus{outline:2px solid #bfd4fb;border-color:var(--blue)}
+  .ctrl-hd .suffix{font-size:12px;color:var(--muted);width:12px}
+  input[type=range]{width:100%;accent-color:var(--blue);height:20px;cursor:pointer;margin:0}
+  .toggles{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 4px}
+  .toggles label{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink2);
+                 background:#f7f9fc;border:1px solid var(--line);border-radius:20px;padding:4px 11px;cursor:pointer;
+                 user-select:none}
+  .toggles input{accent-color:var(--blue);margin:0}
+  .ro{margin-top:14px;border-top:1px dashed var(--line);padding-top:10px;display:grid;gap:2px}
+  .ro-row{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:3px 0}
+  .ro-row .k{font-size:13px;color:var(--muted)}
+  .ro-row .v{font-family:var(--mono);font-size:14px;color:var(--ink)}
+  .ro-row.hl{background:var(--orange-bg);border-radius:8px;padding:6px 9px;margin:4px 0}
+  .ro-row.hl .k{color:#a2410a;font-weight:600}
+  .ro-row.hl .v{color:#a2410a;font-weight:700;font-size:15px}
+  .ro-row .sub{font-size:12px;color:#a2410a;opacity:.85}
+  .warn{margin-top:10px;background:#fff6ed;border:1px solid #fbd0aa;color:#9a3f06;
+        border-radius:9px;padding:8px 10px;font-size:13px;display:none}
+  .warn.on{display:block}
+
+  /* 体积元放大镜 */
+  .mag-body{display:grid;grid-template-columns:minmax(0,1fr) 306px;gap:18px;align-items:center}
+  .mag-canvas{position:relative;height:206px}
+  #mag{display:block;width:100%;height:100%;border-radius:10px;background:linear-gradient(180deg,#fbfdff,#f4f8fd)}
+  .mag-side{display:grid;gap:9px}
+  .chip{border:1px solid var(--line);border-radius:10px;padding:7px 10px 8px;background:#fbfcfe}
+  .chip .row{display:flex;align-items:center;gap:8px}
+  .swatch{width:9px;height:9px;border-radius:3px;flex:none}
+  .chip .nm{font-size:13px;color:var(--ink2);flex:1;white-space:nowrap}
+  .chip .val{font-family:var(--mono);font-size:13.5px;font-weight:600}
+  .bar{height:6px;border-radius:4px;background:#eef2f8;margin-top:6px;overflow:hidden}
+  .bar i{display:block;height:100%;border-radius:4px;transition:width .06s linear}
+  .formula{margin-top:14px;text-align:center;font-family:var(--mono);font-size:19px;color:var(--ink);
+           padding:11px 10px;background:#f8fafd;border:1px dashed #d8e2f0;border-radius:10px}
+  .formula .c1{color:var(--blue);font-weight:600}
+  .formula .c2{color:var(--cyan);font-weight:600}
+  .formula .c3{color:var(--orange);font-weight:600}
+  .pill{background:var(--orange-bg);border-radius:6px;padding:1px 5px}
+  .formula-note{margin-top:9px;font-size:13px;color:var(--ink2);text-align:center;line-height:1.7}
+  .formula-note .c3{color:var(--orange);font-weight:600}
+  footer{margin-top:16px;font-size:12.5px;color:#94a0b0;text-align:center}
+
+  /* ========== 物理情景 ========== */
+  .scenes{grid-column:1/-1}
+  .frame-tbl{width:100%;border-collapse:collapse;font-size:12.5px;margin:2px 0 14px;color:var(--ink2)}
+  .frame-tbl th,.frame-tbl td{border:1px solid var(--line);padding:5px 8px;text-align:left;vertical-align:top}
+  .frame-tbl th{background:#f7f9fc;font-weight:600;color:var(--ink)}
+  .frame-tbl td b{color:var(--blue)}
+  .tbl-wrap{overflow-x:auto}
+  .tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+  .tab{font:13px/1 inherit;font-family:inherit;padding:7px 12px;border-radius:9px;border:1px solid var(--line);
+       background:#f7f9fc;color:var(--ink2);cursor:pointer;transition:.12s}
+  .tab:hover{background:#eef3fb;border-color:#cfdcf0}
+  .tab.active{background:var(--blue);border-color:var(--blue);color:#fff;font-weight:600}
+  .scene[hidden]{display:none}
+  .scene-body{display:grid;grid-template-columns:minmax(0,1fr) 322px;gap:16px;align-items:start}
+  .scene-canvas{position:relative;height:clamp(360px,52vh,520px)}
+  .scene-cv{display:block;width:100%;height:100%;touch-action:none;cursor:grab;border-radius:10px;
+            background:linear-gradient(180deg,#fbfdff,#f3f7fc)}
+  .scene-cv:active{cursor:grabbing}
+  .scene-side{display:grid;gap:9px}
+  .sc-tag{font-size:12.5px;color:var(--blue);background:var(--blue-bg);border-radius:7px;padding:4px 9px}
+  .sc-ctrl{margin:2px 0 4px}
+  .seg{display:flex;gap:6px}
+  .seg button{flex:1;font:13px/1 inherit;font-family:inherit;padding:6px 8px;border-radius:8px;
+              border:1px solid #d7dfea;background:#fff;color:var(--ink2);cursor:pointer}
+  .seg button.on{background:var(--blue);border-color:var(--blue);color:#fff;font-weight:600}
+  .btn{font:13px/1 inherit;font-family:inherit;padding:7px 10px;border-radius:8px;border:1px solid #d7dfea;
+       background:#fff;color:var(--ink2);cursor:pointer}
+  .btn:hover{background:#f2f6fc}
+  .btn.primary{background:var(--blue);border-color:var(--blue);color:#fff;font-weight:600}
+  .btn.primary:hover{filter:brightness(1.06)}
+  .chart{display:block;width:100%;height:132px;border:1px solid var(--line);border-radius:9px;background:#fcfdff}
+  .conclusion{margin-top:12px;font-size:18px;line-height:1.55;color:var(--ink);background:#f7f9fc;
+              border-left:3px solid var(--blue);border-radius:0 9px 9px 0;padding:10px 14px}
+  .conclusion b{color:var(--blue)}
+  .conclusion .hi{color:var(--orange)}
+  .conclusion sup,.formula-note sup{font-size:.72em;line-height:0;vertical-align:super}
+
+  @media (max-width:900px){
+    main{grid-template-columns:minmax(0,1fr)}
+    .mag-body{grid-template-columns:minmax(0,1fr)}
+    .canvas-wrap{height:clamp(340px,56vh,460px)}
+    .formula{font-size:15px}
+    .formula-note{text-align:left}
+    .scene-body{grid-template-columns:minmax(0,1fr)}
+    .scene-canvas{height:clamp(320px,52vh,440px)}
+    .conclusion{font-size:18px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>球坐标：让 sin θ 看得见</h1>
+    <p class="sub">拖动 P 点或用滑块调节 r、θ、φ，观察直角坐标与 r sin θ 如何同步变化；再往下看体积元里，sin θ 为什么只挂在 φ 方向。</p>
+  </header>
+
+  <main>
+    <section class="card stage">
+      <div class="card-hd">
+        <h2>球体主视图</h2>
+        <span class="hd-note">拖动空白处旋转视角 · 滚轮缩放 · 拖动 P 点改变 θ 与 φ</span>
+      </div>
+      <div class="canvas-wrap">
+        <canvas id="view"></canvas>
+        <div class="stage-tip">蓝色 = 径向 r　·　青色 = θ 方向（经线）　·　橙色 = φ 方向（纬线圈）</div>
+      </div>
+    </section>
+
+    <aside class="card panel">
+      <div class="card-hd"><h2>控制面板</h2></div>
+
+      <div class="coords">r = <b id="co-r">1.00</b>　　θ = <b id="co-th">55</b>°　　φ = <b id="co-ph">40</b>°</div>
+
+      <div class="ctrl">
+        <div class="ctrl-hd"><span class="sym">r</span><span class="desc">到原点的距离</span>
+          <input class="num" id="r-num" type="number" min="0.2" max="2" step="0.01" value="1.00" aria-label="r 数值">
+          <span class="suffix"></span></div>
+        <input id="r-rng" type="range" min="0.2" max="2" step="0.01" value="1.00" aria-label="r 滑块">
+      </div>
+
+      <div class="ctrl">
+        <div class="ctrl-hd"><span class="sym">θ</span><span class="desc">极角 · 从 z 轴正向量</span>
+          <input class="num" id="th-num" type="number" min="0" max="180" step="1" value="55" aria-label="θ 数值">
+          <span class="suffix">°</span></div>
+        <input id="th-rng" type="range" min="0" max="180" step="1" value="55" aria-label="θ 滑块">
+      </div>
+
+      <div class="ctrl">
+        <div class="ctrl-hd"><span class="sym">φ</span><span class="desc">方位角 · 赤道面内从 x 轴量</span>
+          <input class="num" id="ph-num" type="number" min="0" max="360" step="1" value="40" aria-label="φ 数值">
+          <span class="suffix">°</span></div>
+        <input id="ph-rng" type="range" min="0" max="360" step="1" value="40" aria-label="φ 滑块">
+      </div>
+
+      <div class="toggles">
+        <label><input type="checkbox" id="t-grid" checked>显示网格</label>
+        <label><input type="checkbox" id="t-vec" checked>显示单位矢量</label>
+        <label><input type="checkbox" id="t-vol" checked>显示体积元</label>
+        <label><input type="checkbox" id="t-proj" checked>显示投影线</label>
+      </div>
+
+      <div class="ro">
+        <div class="ro-row"><span class="k">直角坐标 x</span><span class="v" id="v-x">0.63</span></div>
+        <div class="ro-row"><span class="k">直角坐标 y</span><span class="v" id="v-y">0.53</span></div>
+        <div class="ro-row"><span class="k">直角坐标 z</span><span class="v" id="v-z">0.57</span></div>
+        <div class="ro-row"><span class="k">sin θ</span><span class="v" id="v-sin">0.819</span></div>
+        <div class="ro-row hl">
+          <span class="k">r sin θ<br><span class="sub">到 z 轴的距离</span></span>
+          <span class="v" id="v-rho">0.82</span>
+        </div>
+        <div class="ro-row"><span class="k">纬线圈半径<br><span class="sub">与上一行是同一个量</span></span><span class="v" id="v-circ">0.82</span></div>
+      </div>
+
+      <div class="warn" id="warn">θ 已接近极点：此处 φ 无定义（退化点），所有含 φ 的量都会退化为 0 —— 纬线圈缩成一点，体积元里橙色那条棱也随之消失。</div>
+    </aside>
+
+    <section class="card mag">
+      <div class="card-hd">
+        <h2>体积元放大镜</h2>
+        <span class="hd-note">P 点附近的三条棱按固定比例放大绘制 · 拖动 θ 滑块看橙色棱的变化</span>
+      </div>
+      <div class="mag-body">
+        <div class="mag-canvas"><canvas id="mag"></canvas></div>
+        <div class="mag-side">
+          <div class="chip">
+            <div class="row"><span class="swatch" style="background:#2563eb"></span>
+              <span class="nm">dr（固定示意）</span><span class="val" id="c1" style="color:#2563eb">0.050</span></div>
+            <div class="bar"><i id="b1" style="width:100%;background:#2563eb"></i></div>
+          </div>
+          <div class="chip">
+            <div class="row"><span class="swatch" style="background:#0d9488"></span>
+              <span class="nm">r dθ（θ 方向）</span><span class="val" id="c2" style="color:#0d9488">0.175</span></div>
+            <div class="bar"><i id="b2" style="width:100%;background:#0d9488"></i></div>
+          </div>
+          <div class="chip">
+            <div class="row"><span class="swatch" style="background:#ea580c"></span>
+              <span class="nm">r sin θ dφ（φ 方向）</span><span class="val" id="c3" style="color:#ea580c">0.143</span></div>
+            <div class="bar"><i id="b3" style="width:100%;background:#ea580c"></i></div>
+          </div>
+        </div>
+      </div>
+      <div class="formula">
+        dV = <span class="c1">dr</span> · <span class="c2">r dθ</span> · <span class="c3">r <span class="pill">sin θ</span> dφ</span>
+        &nbsp;=&nbsp; r² <span class="c3">sin θ</span> dr dθ dφ
+      </div>
+      <div class="formula-note">
+        sin θ 只挂在 <span class="c3">φ 方向</span>上：沿 φ 方向走的是纬线圈，它的半径是 r sin θ，而不是 r。
+      </div>
+    </section>
+
+    <section class="card scenes">
+      <div class="card-hd">
+        <h2>物理情景</h2>
+        <span class="hd-note">拿到题先问「哪个坐标在变」，再决定用不用球坐标 · 一次只显示一个情景</span>
+        <button class="hd-reset" id="view-reset" type="button">重置视角</button>
+      </div>
+
+      <div class="tbl-wrap">
+        <table class="frame-tbl">
+          <tr><th>题型</th><th>谁在变</th><th>谁不变</th><th>物理对应</th><th>本页情景</th></tr>
+          <tr><td>轴对称问题</td><td><b>φ</b>（积分时被积掉）</td><td>r、θ</td><td>球壳、球体、点电荷</td><td>A1、A2、A3、B1、B3</td></tr>
+          <tr><td>锥面运动</td><td><b>φ</b></td><td>r、θ</td><td>圆锥摆、匀速圆周运动</td><td>A4</td></tr>
+          <tr><td>球面运动</td><td>θ、φ</td><td>r</td><td>球面摆、球面波</td><td>—</td></tr>
+          <tr><td>有心力运动</td><td><b>r、φ</b></td><td>—</td><td>开普勒轨道、卢瑟福散射</td><td>B2</td></tr>
+          <tr><td>一般三维</td><td>全部</td><td>—</td><td>抛体、螺旋线</td><td>—</td></tr>
+        </table>
+      </div>
+
+      <div class="tabs" role="tablist">
+        <button class="tab active" data-scene="a1">A1 球壳惯量</button>
+        <button class="tab" data-scene="a2">A2 高斯定理</button>
+        <button class="tab" data-scene="a3">A3 速率分布</button>
+        <button class="tab" data-scene="a4">A4 圆锥摆</button>
+        <button class="tab" data-scene="b1">B1 带电球壳</button>
+        <button class="tab" data-scene="b2">B2 开普勒轨道</button>
+        <button class="tab" data-scene="b3">B3 氢原子</button>
+        <button class="tab" data-scene="cc">C 纬度对照</button>
+      </div>
+
+      <!-- A1 -->
+      <div class="scene" id="sc-a1">
+        <div class="scene-body">
+          <div class="scene-canvas"><canvas class="scene-cv" id="cv-a1"></canvas></div>
+          <div class="scene-side">
+            <div class="sc-tag">轴对称问题 · φ 被积掉，只剩 θ 在扫</div>
+            <div class="sc-ctrl">
+              <div class="ctrl-hd"><span class="desc">积分进度（扫到 θ =）</span>
+                <input class="num" id="a1-num" type="number" min="0" max="180" step="1" value="90" aria-label="A1 积分进度">
+                <span class="suffix">°</span></div>
+              <input id="a1-rng" type="range" min="0" max="180" step="1" value="90" aria-label="A1 积分进度滑块">
+            </div>
+            <div class="ro">
+              <div class="ro-row"><span class="k">已扫过质量分数</span><span class="v" id="a1-mass">0.500</span></div>
+              <div class="ro-row hl"><span class="k">已累加 J ÷ mR²</span><span class="v" id="a1-j">0.3333</span></div>
+              <div class="ro-row"><span class="k">当前环带面积系数 sin θ</span><span class="v" id="a1-sin">1.000</span></div>
+              <div class="ro-row"><span class="k">环带周长 2πR sin θ</span><span class="v" id="a1-per">6.283</span></div>
+            </div>
+            <canvas class="chart" id="ch-a1"></canvas>
+            <button class="btn" id="a1-reset">复位到 θ = 90°</button>
+          </div>
+        </div>
+        <div class="conclusion">
+          每一圈的贡献是 <b>dJ = (R sin θ)² · σ · 2πR sin θ · R dθ</b>。权重曲线 <b>sin³θ</b> 在赤道最大、两极归零——
+          拖到底就得到 <b>2/3 mR²</b>。它比实心球的 2/5 大，因为球壳的质量全部压在最外圈。
+        </div>
+      </div>
+
+      <!-- A2 -->
+      <div class="scene" id="sc-a2" hidden>
+        <div class="scene-body">
+          <div class="scene-canvas"><canvas class="scene-cv" id="cv-a2"></canvas></div>
+          <div class="scene-side">
+            <div class="sc-tag">轴对称问题 + 立体角 · 球面上怎么算「均匀」</div>
+            <div class="sc-ctrl">
+              <div class="ctrl-hd"><span class="desc">高斯面半径 r</span>
+                <input class="num" id="a2-num" type="number" min="0.4" max="1.8" step="0.05" value="1.00" aria-label="A2 高斯面半径">
+                <span class="suffix"></span></div>
+              <input id="a2-rng" type="range" min="0.4" max="1.8" step="0.05" value="1.00" aria-label="A2 半径滑块">
+            </div>
+            <div class="seg" id="a2-seg">
+              <button data-mode="theta">θ 均匀（错）</button>
+              <button data-mode="costheta" class="on">cos θ 均匀（对）</button>
+            </div>
+            <div class="ro">
+              <div class="ro-row"><span class="k">球面面积 4πr²</span><span class="v" id="a2-area">12.57</span></div>
+              <div class="ro-row"><span class="k">场强 E（r=1 处为 1）</span><span class="v" id="a2-e">1.000</span></div>
+              <div class="ro-row hl"><span class="k">通量 Φ = E · 4πr²</span><span class="v" id="a2-flux">12.57</span></div>
+              <div class="ro-row"><span class="k">撒点数</span><span class="v" id="a2-n">612</span></div>
+            </div>
+            <canvas class="chart" id="ch-a2"></canvas>
+          </div>
+        </div>
+        <div class="conclusion">
+          面积 <b>×4</b>、场强 <b>÷4</b>，通量 <b>Φ = q/ε₀ 恒定</b>。切到「θ 均匀」会看到两极挤成一团——
+          球面上要均匀撒点必须按 <b>sin θ 加权</b>（即 cos θ 均匀），这正是 <b>dV = r² sin θ dr dθ dφ</b> 里那个 sin θ 的统计含义。
+        </div>
+      </div>
+
+      <!-- A3 -->
+      <div class="scene" id="sc-a3" hidden>
+        <div class="scene-body">
+          <div class="scene-canvas"><canvas class="scene-cv" id="cv-a3"></canvas></div>
+          <div class="scene-side">
+            <div class="sc-tag">轴对称问题 · 只不过发生在<b>速度空间</b></div>
+            <div class="sc-ctrl">
+              <div class="ctrl-hd"><span class="desc">温度 T（N₂，28 g/mol）</span>
+                <input class="num" id="a3-tnum" type="number" min="100" max="1500" step="10" value="300" aria-label="A3 温度">
+                <span class="suffix">K</span></div>
+              <input id="a3-trng" type="range" min="100" max="1500" step="10" value="300" aria-label="A3 温度滑块">
+            </div>
+            <div class="sc-ctrl">
+              <div class="ctrl-hd"><span class="desc">看速率 v（单位 v_p）</span>
+                <input class="num" id="a3-vnum" type="number" min="0.2" max="2.5" step="0.05" value="1.00" aria-label="A3 速率">
+                <span class="suffix">v_p</span></div>
+              <input id="a3-vrng" type="range" min="0.2" max="2.5" step="0.05" value="1.00" aria-label="A3 速率滑块">
+            </div>
+            <div class="ro">
+              <div class="ro-row"><span class="k">最概然速率 v_p</span><span class="v" id="a3-vp">422</span></div>
+              <div class="ro-row"><span class="k">平均速率 v̄</span><span class="v" id="a3-vb">476</span></div>
+              <div class="ro-row"><span class="k">方均根速率 v_rms</span><span class="v" id="a3-vr">517</span></div>
+              <div class="ro-row hl"><span class="k">f(v) ×10⁻³ s/m</span><span class="v" id="a3-fv">1.96</span></div>
+            </div>
+            <canvas class="chart" id="ch-a3"></canvas>
+          </div>
+        </div>
+        <div class="conclusion">
+          <b>f(v) dv = 4πv² · (m/2πkT)<sup>3/2</sup> e<sup>−mv²/2kT</sup> dv</b>。那个 <b>4πv²</b> 就是速度空间里的球面面积——
+          和 A1 里 <span class="hi">2πR² sin θ dθ</span> 是同一个球面面积元的产物，只是半径换成了速率。注意 T 翻倍，v_p 只涨 <b>√2</b> 倍。
+        </div>
+      </div>
+
+      <!-- A4 -->
+      <div class="scene" id="sc-a4" hidden>
+        <div class="scene-body">
+          <div class="scene-canvas"><canvas class="scene-cv" id="cv-a4"></canvas></div>
+          <div class="scene-side">
+            <div class="sc-tag">锥面运动 · r 与 θ 都不变，只有 φ 在跑</div>
+            <div class="sc-ctrl">
+              <div class="ctrl-hd"><span class="desc">锥角 α（θ 恒等于它）</span>
+                <input class="num" id="a4-anum" type="number" min="10" max="80" step="1" value="40" aria-label="A4 锥角">
+                <span class="suffix">°</span></div>
+              <input id="a4-arng" type="range" min="10" max="80" step="1" value="40" aria-label="A4 锥角滑块">
+            </div>
+            <div class="sc-ctrl">
+              <div class="ctrl-hd"><span class="desc">角速度 ω</span>
+                <input class="num" id="a4-wnum" type="number" min="0.5" max="4" step="0.1" value="2.0" aria-label="A4 角速度">
+                <span class="suffix">rad/s</span></div>
+              <input id="a4-wrng" type="range" min="0.5" max="4" step="0.1" value="2.0" aria-label="A4 角速度滑块">
+            </div>
+            <div class="seg"><button class="btn primary" id="a4-play">▶ 播放</button></div>
+            <div class="ro">
+              <div class="ro-row"><span class="k">a_r（径向）</span><span class="v" id="a4-ar">−1.10</span></div>
+              <div class="ro-row hl"><span class="k">a_θ（θ 方向，不为零！）</span><span class="v" id="a4-at">−1.31</span></div>
+              <div class="ro-row"><span class="k">a_φ（φ 方向）</span><span class="v" id="a4-ap">0.00</span></div>
+              <div class="ro-row"><span class="k">合加速度 |a|</span><span class="v" id="a4-am">1.71</span></div>
+              <div class="ro-row"><span class="k">速率 v = L sin α · ω</span><span class="v" id="a4-v">1.29</span></div>
+              <div class="ro-row"><span class="k">重力配平所需 ω</span><span class="v" id="a4-wg">3.58</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="conclusion">
+          θ 从头到尾没变，<b>a_θ 却不是零</b>。因为 e_θ 是随位置转动的单位矢量——
+          <span class="hi">「坐标不变」≠「该方向加速度为零」</span>，这是球坐标与直角坐标最大的不同。
+        </div>
+      </div>
+
+      <!-- B1 -->
+      <div class="scene" id="sc-b1" hidden>
+        <div class="scene-body">
+          <div class="scene-canvas"><canvas class="scene-cv" id="cv-b1"></canvas></div>
+          <div class="scene-side">
+            <div class="sc-tag">轴对称问题 · r 分段，壳内壳外两套公式</div>
+            <div class="sc-ctrl">
+              <div class="ctrl-hd"><span class="desc">观察点到球心 r（单位 R）</span>
+                <input class="num" id="b1-num" type="number" min="0.15" max="2.4" step="0.05" value="1.40" aria-label="B1 观察点半径">
+                <span class="suffix">R</span></div>
+              <input id="b1-rng" type="range" min="0.15" max="2.4" step="0.05" value="1.40" aria-label="B1 半径滑块">
+            </div>
+            <div class="ro">
+              <div class="ro-row"><span class="k">位置</span><span class="v" id="b1-zone">壳外</span></div>
+              <div class="ro-row hl"><span class="k">E ÷ (kq/R²)</span><span class="v" id="b1-e">0.510</span></div>
+              <div class="ro-row"><span class="k">与点电荷相比</span><span class="v" id="b1-cmp">完全相同</span></div>
+            </div>
+            <canvas class="chart" id="ch-b1"></canvas>
+          </div>
+        </div>
+        <div class="conclusion">
+          壳内 <b>E = 0</b>；壳外 <b>E = kq/r²</b>，与把电荷全放在球心等效——这就是高斯定理最经典的用法。
+          把 r 从 1.2R 拉到 2.4R，E 正好降到 <b>1/4</b>。
+        </div>
+      </div>
+
+      <!-- B2 -->
+      <div class="scene" id="sc-b2" hidden>
+        <div class="scene-body">
+          <div class="scene-canvas"><canvas class="scene-cv" id="cv-b2"></canvas></div>
+          <div class="scene-side">
+            <div class="sc-tag">有心力运动 · r 与 φ <b>同时变</b>，球坐标的 r 不是常数</div>
+            <div class="sc-ctrl">
+              <div class="ctrl-hd"><span class="desc">偏心率 e（0 = 圆，越大越扁）</span>
+                <input class="num" id="b2-num" type="number" min="0" max="0.8" step="0.02" value="0.50" aria-label="B2 偏心率">
+                <span class="suffix"></span></div>
+              <input id="b2-rng" type="range" min="0" max="0.8" step="0.02" value="0.50" aria-label="B2 偏心率滑块">
+            </div>
+            <div class="seg"><button class="btn primary" id="b2-play">▶ 播放</button></div>
+            <div class="ro">
+              <div class="ro-row hl"><span class="k">面积速度 ½r²φ̇</span><span class="v" id="b2-da">0.436</span></div>
+              <div class="ro-row"><span class="k">等时扇形各占总面积</span><span class="v" id="b2-sec">10.0%</span></div>
+              <div class="ro-row"><span class="k">近/远日点速率比</span><span class="v" id="b2-vr">3.00</span></div>
+              <div class="ro-row"><span class="k">当前 r / a</span><span class="v" id="b2-r">1.00</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="conclusion">
+          <b>½r²φ̇ = 常数</b>（开普勒第二定律）：两块阴影取的<b>时间一样长</b>，扫过的<b>面积就一样大</b>，
+          所以近日点又快又近、远日点又慢又远。这里的 <span class="hi">½r²dφ</span> 与球坐标的 r² 同源。
+        </div>
+      </div>
+
+      <!-- B3 -->
+      <div class="scene" id="sc-b3" hidden>
+        <div class="scene-body">
+          <div class="scene-canvas"><canvas class="scene-cv" id="cv-b3"></canvas></div>
+          <div class="scene-side">
+            <div class="sc-tag">轴对称 + 径向 · 4πr² 的第四种外衣</div>
+            <div class="seg" id="b3-seg">
+              <button data-mode="s" class="on">1s 态</button>
+              <button data-mode="p">2p 态</button>
+            </div>
+            <div class="sc-ctrl">
+              <div class="ctrl-hd"><span class="desc">球壳半径 r（单位 a₀）</span>
+                <input class="num" id="b3-num" type="number" min="0.2" max="8" step="0.1" value="1.0" aria-label="B3 球壳半径">
+                <span class="suffix">a₀</span></div>
+              <input id="b3-rng" type="range" min="0.2" max="8" step="0.1" value="1.0" aria-label="B3 半径滑块">
+            </div>
+            <div class="ro">
+              <div class="ro-row"><span class="k">径向概率峰位</span><span class="v" id="b3-peak">1.0 a₀</span></div>
+              <div class="ro-row hl"><span class="k">球内概率 ∫₀^r P dr</span><span class="v" id="b3-pin">0.323</span></div>
+              <div class="ro-row"><span class="k">该处 P(r)（相对峰值）</span><span class="v" id="b3-pr">1.000</span></div>
+            </div>
+            <canvas class="chart" id="ch-b3"></canvas>
+          </div>
+        </div>
+        <div class="conclusion">
+          <b>P(r) = 4πr²|R(r)|²</b>：又是球壳体积。1s 峰在 <b>r = a₀</b>（玻尔半径），2p 峰在 <b>4a₀</b>——
+          「电子最可能在哪儿」问的从来都是球壳，不是某个点。
+        </div>
+      </div>
+
+      <!-- C -->
+      <div class="scene" id="sc-cc" hidden>
+        <div class="scene-body">
+          <div class="scene-canvas"><canvas class="scene-cv" id="cv-cc"></canvas></div>
+          <div class="scene-side">
+            <div class="sc-tag">不是物理情景，是最容易犯的换算错</div>
+            <div class="sc-ctrl">
+              <div class="ctrl-hd"><span class="desc">地理纬度 λ（从赤道量）</span>
+                <input class="num" id="cc-num" type="number" min="0" max="90" step="1" value="30" aria-label="C 纬度">
+                <span class="suffix">°</span></div>
+              <input id="cc-rng" type="range" min="0" max="90" step="1" value="30" aria-label="C 纬度滑块">
+            </div>
+            <div class="ro">
+              <div class="ro-row hl"><span class="k">对应的极角 θ = 90° − λ</span><span class="v" id="cc-th">60°</span></div>
+              <div class="ro-row"><span class="k">纬线圈半径 R cos λ</span><span class="v" id="cc-rho">0.866</span></div>
+              <div class="ro-row"><span class="k">也等于 R sin θ</span><span class="v" id="cc-sin">0.866</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="conclusion">
+          <b>θ 是极角，不是纬度</b>：θ 从 z 轴量、最大 180°；纬度从赤道量、最大只有 90°。
+          记住 <b>θ = 90° − λ</b>——北纬 30° 就是 θ = 60°。
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>本版本：主视图 + 体积元放大镜 + 8 个物理情景　·　配色恒定为 蓝=径向 r、青=θ、橙=φ</footer>
+</div>
+
+<script>
+(function(){
+  'use strict';
+
+  /* ===================== 基础工具 ===================== */
+  var RAD = Math.PI / 180;
+  var COL = {
+    blue:'#2563eb', cyan:'#0d9488', orange:'#ea580c',
+    grid:'#8ea3bd', axis:'#46536b', ink:'#1f2937', muted:'#7b8798'
+  };
+  var FONT_CN = '"Microsoft YaHei","PingFang SC",sans-serif';
+  var FONT_MATH = 'italic %dpx "Cambria Math","Times New Roman",serif';
+
+  function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
+  function fmt(v,n){ n = (n==null?2:n); var s = v.toFixed(n); if(/^-0(\.0+)?$/.test(s)) s = s.slice(1); return s; }
+  function rgba(hex,a){
+    var r = parseInt(hex.substr(1,2),16), g = parseInt(hex.substr(3,2),16), b = parseInt(hex.substr(5,2),16);
+    return 'rgba('+r+','+g+','+b+','+a+')';
+  }
+  function sph2cart(r,thDeg,phDeg){
+    var t = thDeg*RAD, p = phDeg*RAD, st = Math.sin(t);
+    return [r*st*Math.cos(p), r*st*Math.sin(p), r*Math.cos(t)];
+  }
+
+  /* ===================== 状态 ===================== */
+  var S = {
+    r: 1.00, th: 55, ph: 40,
+    yaw: -62*RAD, pitch: 18*RAD, zoom: 1,
+    grid: true, vec: true, vol: true, proj: true
+  };
+
+  /* ===================== 摄像机与投影 ===================== */
+  // 俯仰角的允许范围：太贴近 0（几乎沿赤道面平视）时，纬线圈会退化成几条平行横线，
+  // 看上去像"球面上贴了两根横杠"。这里把 |pitch| 限制在 17°~72°。
+  var PITCH_MIN = 0.30, PITCH_MAX = 1.25;
+  function setPitchFromDrag(v){
+    var sg = v < 0 ? -1 : 1, a = Math.abs(v);
+    if(a < PITCH_MIN){                       // 不跨越赤道面（否则会突然跳到另一侧）
+      sg = S.pitch < 0 ? -1 : 1; a = PITCH_MIN;
+    }
+    S.pitch = sg * Math.min(a, PITCH_MAX);
+  }
+  function camBasis(pitchIn){
+    var pit = (pitchIn == null ? S.pitch : pitchIn);
+    var cp = Math.cos(pit), sp = Math.sin(pit);
+    var cy = Math.cos(S.yaw),   sy = Math.sin(S.yaw);
+    return {
+      n:     [ cp*cy,  cp*sy,  sp ],          // 指向摄像机
+      right: [ -sy,    cy,     0  ],          // 屏幕右
+      up:    [ -sp*cy, -sp*sy, cp ]           // 屏幕上
+    };
+  }
+  function projectPt(p, cam, scale, cx, cy){
+    var x = p[0]*cam.right[0] + p[1]*cam.right[1] + p[2]*cam.right[2];
+    var y = p[0]*cam.up[0]    + p[1]*cam.up[1]    + p[2]*cam.up[2];
+    var d = p[0]*cam.n[0]     + p[1]*cam.n[1]     + p[2]*cam.n[2];
+    return [cx + x*scale, cy - y*scale, d];
+  }
+
+  /* ===================== 曲线生成 ===================== */
+  function meridianPts(phDeg, R, N){
+    R = R||1; N = N||64;
+    var a = [], p = phDeg*RAD, i, t;
+    for(i=0;i<=N;i++){
+      t = i/N*2*Math.PI;
+      a.push([R*Math.sin(t)*Math.cos(p), R*Math.sin(t)*Math.sin(p), R*Math.cos(t)]);
+    }
+    return a;
+  }
+  function parallelPts(thDeg, R, N){
+    R = R||1; N = N||64;
+    var a = [], t0 = thDeg*RAD, s = R*Math.sin(t0), z = R*Math.cos(t0), i, q;
+    for(i=0;i<=N;i++){
+      q = i/N*2*Math.PI;
+      a.push([s*Math.cos(q), s*Math.sin(q), z]);
+    }
+    return a;
+  }
+  var GRID_M = [], GRID_P = [];
+  (function(){
+    for(var k=0;k<12;k++) GRID_M.push(meridianPts(k*30,1));
+    [30,60,120,150].forEach(function(t){ GRID_P.push(parallelPts(t,1)); });
+  })();
+  var EQ = parallelPts(90,1);
+
+  /* ===================== 画布尺寸 ===================== */
+  function fitCanvas(cv){
+    var dpr = window.devicePixelRatio || 1;
+    var rect = cv.getBoundingClientRect();
+    var w = Math.max(1, Math.round(rect.width));
+    var h = Math.max(1, Math.round(rect.height));
+    if(cv._w === w && cv._h === h && cv._dpr === dpr && cv._ctx) return;
+    cv._w = w; cv._h = h; cv._dpr = dpr;
+    cv.width = Math.round(w*dpr); cv.height = Math.round(h*dpr);
+    cv._ctx = cv.getContext('2d');
+  }
+
+  /* ===================== 通用绘制 ===================== */
+  function drawCurve3(ctx, pts, opt, V){
+    var n = pts.length, i, A = [], P, d, t, bi, g;
+    for(i=0;i<n;i++) A.push(projectPt(pts[i], V.cam, V.scale, V.cx, V.cy));
+    var paths = [new Path2D(), new Path2D(), new Path2D()];
+    var dref = opt.dref || 1;
+    for(i=0;i<n-1;i++){
+      d = ((A[i][2] + A[i+1][2]) / 2) / dref;
+      t = clamp((d+1)/2, 0, 1);
+      bi = t < 0.4 ? 0 : (t < 0.72 ? 1 : 2);
+      g = paths[bi];
+      g.moveTo(A[i][0], A[i][1]); g.lineTo(A[i+1][0], A[i+1][1]);
+    }
+    var al = [opt.aBack, (opt.aBack+opt.aFront)/2, opt.aFront];
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    for(i=0;i<3;i++){
+      ctx.strokeStyle = rgba(opt.color, al[i]);
+      ctx.lineWidth = opt.width;
+      ctx.stroke(paths[i]);
+    }
+  }
+
+  function makeTxt(ctx){
+    return function(txt, x, y, o){
+      o = o || {};
+      ctx.save();
+      ctx.font = o.font || ('13px ' + FONT_CN);
+      ctx.textAlign = o.align || 'center';
+      ctx.textBaseline = o.base || 'middle';
+      if(o.halo !== false){
+        ctx.lineWidth = o.haloW || 3.6;
+        ctx.strokeStyle = 'rgba(255,255,255,.94)';
+        ctx.lineJoin = 'round';
+        ctx.strokeText(txt, x, y);
+      }
+      ctx.fillStyle = o.color || COL.ink;
+      ctx.fillText(txt, x, y);
+      ctx.restore();
+    };
+  }
+
+  function arrowHead(ctx, x0, y0, x1, y1, color, size){
+    var a = Math.atan2(y1-y0, x1-x0), s = size || 7.5;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x1 - s*Math.cos(a-0.38), y1 - s*Math.sin(a-0.38));
+    ctx.lineTo(x1 - s*Math.cos(a+0.38), y1 - s*Math.sin(a+0.38));
+    ctx.closePath();
+    ctx.fillStyle = color; ctx.fill();
+  }
+
+  /* ===================== 主视图 ===================== */
+  var cvView = document.getElementById('view');
+  var lastView = null;
+
+  function drawView(){
+    fitCanvas(cvView);
+    var ctx = cvView._ctx, W = cvView._w, H = cvView._h;
+    ctx.setTransform(cvView._dpr,0,0,cvView._dpr,0,0);
+    ctx.clearRect(0,0,W,H);
+
+    var cam = camBasis();
+    var scale = Math.min(W,H) * 0.235 * S.zoom;
+    var cx = W/2, cy = H/2;
+    var V = { cam:cam, scale:scale, cx:cx, cy:cy };
+    var P2 = function(p){ return projectPt(p, cam, scale, cx, cy); };
+    var txt = makeTxt(ctx);
+
+    var TH = S.th*RAD, PH = S.ph*RAD, r = S.r;
+    var Pw = sph2cart(r, S.th, S.ph);
+    var Pp = P2(Pw);
+    lastView = { cx:cx, cy:cy, scale:scale, cam:cam, Pp:Pp };
+
+    var rho = r*Math.sin(TH);
+    var zc  = r*Math.cos(TH);
+
+    /* ---- 1. 半透明球体 ---- */
+    var R = scale;
+    var grd = ctx.createRadialGradient(cx - R*0.34, cy - R*0.38, R*0.06, cx, cy, R*1.04);
+    grd.addColorStop(0,   'rgba(255,255,255,.95)');
+    grd.addColorStop(0.55,'rgba(227,239,252,.66)');
+    grd.addColorStop(1,   'rgba(203,224,248,.58)');
+    ctx.beginPath(); ctx.arc(cx,cy,R,0,Math.PI*2);
+    ctx.fillStyle = grd; ctx.fill();
+    ctx.lineWidth = 1.4; ctx.strokeStyle = 'rgba(37,99,235,.38)'; ctx.stroke();
+
+    /* ---- 2. 经纬网格 ---- */
+    if(S.grid){
+      var o = { color:COL.grid, aBack:0.08, aFront:0.40, width:1, dref:1 };
+      GRID_M.forEach(function(m){ drawCurve3(ctx, m, o, V); });
+      GRID_P.forEach(function(p){ drawCurve3(ctx, p, o, V); });
+    }
+
+    /* ---- 3. 赤道圈（φ 参考） ---- */
+    drawCurve3(ctx, EQ, { color:COL.orange, aBack:0.34, aFront:0.95, width:2.1, dref:1 }, V);
+
+    /* ---- 4. P 所在经线（θ 参考） ---- */
+    var mer = meridianPts(S.ph, r);
+    drawCurve3(ctx, mer, { color:COL.cyan, aBack:0.42, aFront:0.98, width:2.1, dref:Math.max(r,0.25) }, V);
+
+    /* ---- 5. P 所在纬线圈（φ 方向的真实半径 = r sinθ） ---- */
+    if(rho > 0.015){
+      var par = parallelPts(S.th, r);
+      drawCurve3(ctx, par, { color:COL.orange, aBack:0.48, aFront:1, width:2.6, dref:Math.max(rho,0.25) }, V);
+    }
+
+    /* ---- 6. 坐标轴 ---- */
+    var AX = [ [1,0,0,'x'], [0,1,0,'y'], [0,0,1,'z'] ];
+    AX.forEach(function(ax){
+      var u = [ax[0],ax[1],ax[2]];
+      var A3 = P2([u[0]*1.62, u[1]*1.62, u[2]*1.62]);
+      var B3 = P2([-u[0]*1.10, -u[1]*1.10, -u[2]*1.10]);
+      var O3 = P2([0,0,0]);
+      // 负半轴
+      ctx.beginPath(); ctx.setLineDash([4,4]);
+      ctx.moveTo(O3[0],O3[1]); ctx.lineTo(B3[0],B3[1]);
+      ctx.strokeStyle = rgba(COL.axis,.34); ctx.lineWidth = 1.2; ctx.stroke();
+      ctx.setLineDash([]);
+      // 正半轴
+      ctx.beginPath();
+      ctx.moveTo(O3[0],O3[1]); ctx.lineTo(A3[0],A3[1]);
+      ctx.strokeStyle = rgba(COL.axis,.85); ctx.lineWidth = 1.6; ctx.stroke();
+      arrowHead(ctx, O3[0],O3[1], A3[0],A3[1], COL.axis, 8);
+      var t3 = P2([u[0]*1.78, u[1]*1.78, u[2]*1.78]);
+      txt(ax[3], t3[0], t3[1], { font:'italic 16px "Cambria Math","Times New Roman",serif', color:COL.axis });
+    });
+
+    /* ---- 7. 投影线：OQ 与 P→Q ---- */
+    var Q = [Pw[0], Pw[1], 0];
+    var Qp = P2(Q);
+    var O3 = P2([0,0,0]);
+
+    if(S.proj){
+      // 竖直线 P→Q
+      ctx.beginPath(); ctx.setLineDash([5,4]);
+      ctx.moveTo(Pp[0],Pp[1]); ctx.lineTo(Qp[0],Qp[1]);
+      ctx.strokeStyle = rgba(COL.axis,.55); ctx.lineWidth = 1.3; ctx.stroke();
+      ctx.setLineDash([]);
+      // 赤道面上的 OQ：长度就是 r sinθ
+      ctx.beginPath(); ctx.moveTo(O3[0],O3[1]); ctx.lineTo(Qp[0],Qp[1]);
+      ctx.strokeStyle = COL.blue; ctx.lineWidth = 2.4; ctx.stroke();
+      // Q 点（与 P 重合时不再标，避免叠字）
+      if(Math.abs(Pw[2]) > 0.02){
+        ctx.beginPath(); ctx.arc(Qp[0],Qp[1],3.2,0,Math.PI*2);
+        ctx.fillStyle = COL.blue; ctx.fill();
+        txt('Q', Qp[0]+11, Qp[1]+11, { font:'italic 13px "Cambria Math","Times New Roman",serif', color:COL.blue });
+      }
+    }
+
+    /* ---- 8. OP ---- */
+    ctx.beginPath(); ctx.moveTo(O3[0],O3[1]); ctx.lineTo(Pp[0],Pp[1]);
+    ctx.strokeStyle = 'rgba(31,41,55,.85)'; ctx.lineWidth = 2.2; ctx.stroke();
+
+    /* ---- 9. θ 弧 ---- */
+    if(S.th > 1.2){
+      var ra = r*0.44, i, t, arcT = [], steps = Math.max(14, Math.round(S.th/2));
+      for(i=0;i<=steps;i++){
+        t = i/steps*TH;
+        arcT.push([ra*Math.sin(t)*Math.cos(PH), ra*Math.sin(t)*Math.sin(PH), ra*Math.cos(t)]);
+      }
+      ctx.beginPath();
+      for(i=0;i<arcT.length;i++){
+        var q = P2(arcT[i]);
+        if(i===0) ctx.moveTo(q[0],q[1]); else ctx.lineTo(q[0],q[1]);
+      }
+      ctx.strokeStyle = COL.cyan; ctx.lineWidth = 2; ctx.stroke();
+      var mid = P2([ra*1.16*Math.sin(TH/2)*Math.cos(PH), ra*1.16*Math.sin(TH/2)*Math.sin(PH), ra*1.16*Math.cos(TH/2)]);
+      txt('θ', mid[0], mid[1], { font:'italic 16px "Cambria Math","Times New Roman",serif', color:COL.cyan });
+    }
+
+    /* ---- 10. φ 弧（赤道面上，从 x 轴到 OQ） ---- */
+    if(rho > 0.05 && S.ph > 0.8){
+      var rpa = rho*0.55, j, tt, arcP = [], st2 = Math.max(14, Math.round(S.ph/2));
+      for(j=0;j<=st2;j++){
+        tt = j/st2*PH;
+        arcP.push([rpa*Math.cos(tt), rpa*Math.sin(tt), 0]);
+      }
+      ctx.beginPath();
+      for(j=0;j<arcP.length;j++){
+        var q2 = P2(arcP[j]);
+        if(j===0) ctx.moveTo(q2[0],q2[1]); else ctx.lineTo(q2[0],q2[1]);
+      }
+      ctx.strokeStyle = COL.orange; ctx.lineWidth = 2; ctx.stroke();
+      var mid2 = P2([rpa*1.06*Math.cos(PH/2), rpa*1.06*Math.sin(PH/2), 0]);
+      txt('φ', mid2[0], mid2[1], { font:'italic 16px "Cambria Math","Times New Roman",serif', color:COL.orange });
+    }
+
+    /* ---- 11. 单位矢量 ---- */
+    if(S.vec){
+      var er  = [ Math.sin(TH)*Math.cos(PH), Math.sin(TH)*Math.sin(PH), Math.cos(TH) ];
+      var eth = [ Math.cos(TH)*Math.cos(PH), Math.cos(TH)*Math.sin(PH), -Math.sin(TH) ];
+      var eph = [ -Math.sin(PH), Math.cos(PH), 0 ];
+      var LEN = 0.40;
+      var vs = [ [er,COL.blue,'r'], [eth,COL.cyan,'θ'], [eph,COL.orange,'φ'] ];
+      vs.forEach(function(v){
+        var tip = P2([Pw[0]+v[0][0]*LEN, Pw[1]+v[0][1]*LEN, Pw[2]+v[0][2]*LEN]);
+        ctx.beginPath(); ctx.moveTo(Pp[0],Pp[1]); ctx.lineTo(tip[0],tip[1]);
+        ctx.strokeStyle = v[1]; ctx.lineWidth = 2; ctx.stroke();
+        arrowHead(ctx, Pp[0],Pp[1], tip[0],tip[1], v[1], 7);
+        // e + 下标
+        var dx = tip[0]-Pp[0], dy = tip[1]-Pp[1], dl = Math.hypot(dx,dy)||1;
+        var lx = tip[0] + dx/dl*9, ly = tip[1] + dy/dl*9;
+        txt('e', lx, ly, { font:'italic 14px "Cambria Math","Times New Roman",serif', color:v[1], align:'left' });
+        txt(v[2], lx+9, ly+5, { font:'italic 10px "Cambria Math","Times New Roman",serif', color:v[1], align:'left' });
+      });
+    }
+
+    /* ---- 12. 主视图里的体积元 ---- */
+    if(S.vol){
+      var dth = 11*RAD, dph = 11*RAD, dr = 0.13;
+      var er2  = [ Math.sin(TH)*Math.cos(PH), Math.sin(TH)*Math.sin(PH), Math.cos(TH) ];
+      var eth2 = [ Math.cos(TH)*Math.cos(PH), Math.cos(TH)*Math.sin(PH), -Math.sin(TH) ];
+      var eph2 = [ -Math.sin(PH), Math.cos(PH), 0 ];
+      var s1 = dr, s2 = r*dth, s3 = rho*dph;
+      var e1 = [er2[0]*s1, er2[1]*s1, er2[2]*s1];
+      var e2 = [eth2[0]*s2, eth2[1]*s2, eth2[2]*s2];
+      var e3 = [eph2[0]*s3, eph2[1]*s3, eph2[2]*s3];
+      var C = function(a,b,c){
+        return P2([Pw[0]+a*e1[0]+b*e2[0]+c*e3[0],
+                   Pw[1]+a*e1[1]+b*e2[1]+c*e3[1],
+                   Pw[2]+a*e1[2]+b*e2[2]+c*e3[2]]);
+      };
+      var V0=C(0,0,0), V1=C(1,0,0), V2=C(0,1,0), V3=C(0,0,1),
+          V12=C(1,1,0), V13=C(1,0,1), V23=C(0,1,1), V123=C(1,1,1);
+      // 三个面淡填充，读起来像一块小方块
+      [[V0,V1,V12,V2,'rgba(37,99,235,.07)'],
+       [V0,V1,V13,V3,'rgba(13,148,136,.07)'],
+       [V0,V2,V23,V3,'rgba(234,88,12,.07)']].forEach(function(f){
+        ctx.beginPath();
+        ctx.moveTo(f[0][0],f[0][1]); ctx.lineTo(f[1][0],f[1][1]);
+        ctx.lineTo(f[2][0],f[2][1]); ctx.lineTo(f[3][0],f[3][1]);
+        ctx.closePath(); ctx.fillStyle=f[4]; ctx.fill();
+      });
+      var EDGES = [
+        [V0,V1,COL.blue,2.4],[V2,V12,COL.blue,1.4],[V3,V13,COL.blue,1.4],[V23,V123,COL.blue,1.4],
+        [V0,V2,COL.cyan,2.4],[V1,V12,COL.cyan,1.4],[V3,V23,COL.cyan,1.4],[V13,V123,COL.cyan,1.4],
+        [V0,V3,COL.orange,2.4],[V1,V13,COL.orange,1.4],[V2,V23,COL.orange,1.4],[V12,V123,COL.orange,1.4]
+      ];
+      EDGES.forEach(function(e){
+        ctx.beginPath(); ctx.moveTo(e[0][0],e[0][1]); ctx.lineTo(e[1][0],e[1][1]);
+        ctx.strokeStyle = rgba(e[2], e[3]>2 ? 0.95 : 0.45);
+        ctx.lineWidth = e[3]; ctx.stroke();
+      });
+    }
+
+    /* ---- 13. 文字标注 ---- */
+    // r
+    (function(){
+      var kk = 0.62;
+      var mx=O3[0]+(Pp[0]-O3[0])*kk, my=O3[1]+(Pp[1]-O3[1])*kk;
+      var dx=Pp[0]-O3[0], dy=Pp[1]-O3[1], L=Math.hypot(dx,dy)||1;
+      var nx=-dy/L, ny=dx/L;
+      if(nx>0){ nx=-nx; ny=-ny; }
+      txt('r', mx+nx*20, my+ny*20, { font:'italic 16px "Cambria Math","Times New Roman",serif', color:COL.ink });
+    })();
+    // r sinθ
+    if(S.proj && rho > 0.03){
+      var mx2=O3[0]+(Qp[0]-O3[0])*0.72, my2=O3[1]+(Qp[1]-O3[1])*0.72;
+      var dx2=Qp[0]-O3[0], dy2=Qp[1]-O3[1], L2=Math.hypot(dx2,dy2)||1;
+      var nx2=-dy2/L2, ny2=dx2/L2;
+      if(ny2<0){ nx2=-nx2; ny2=-ny2; }
+      txt('r sin θ = '+fmt(rho), mx2+nx2*22, my2+ny2*22,
+          { font:'12px '+FONT_CN, color:COL.blue });
+    }
+    // 纬线圈半径标签已省略：数值在右侧面板与橙圈图例中给出，避免小尺寸下叠字
+
+    /* ---- 14. P 点 ---- */
+    ctx.beginPath(); ctx.arc(Pp[0],Pp[1],5.6,0,Math.PI*2);
+    ctx.fillStyle = '#fff'; ctx.fill();
+    ctx.lineWidth = 2.6; ctx.strokeStyle = COL.ink; ctx.stroke();
+    txt('P', Pp[0]-16, Pp[1]+14, { font:'italic 16px "Cambria Math","Times New Roman",serif', color:COL.ink, align:'right' });
+  }
+
+  /* ===================== 体积元放大镜 ===================== */
+  var cvMag = document.getElementById('mag');
+  var PXU = 480;         // 每单位长度对应的像素
+  var DTH = 10*RAD, DPH = 10*RAD, DR = 0.05;
+
+  function drawMag(){
+    fitCanvas(cvMag);
+    var ctx = cvMag._ctx, W = cvMag._w, H = cvMag._h;
+    ctx.setTransform(cvMag._dpr,0,0,cvMag._dpr,0,0);
+    ctx.clearRect(0,0,W,H);
+    var txt = makeTxt(ctx);
+
+    var L1 = DR*PXU;                                  // 蓝：径向
+    var L2 = S.r*DTH*PXU;                             // 青：r dθ
+    var L3 = S.r*Math.sin(S.th*RAD)*DPH*PXU;          // 橙：r sinθ dφ
+
+    var A = [0,-1], B = [-0.866,0.5], D = [0.866,0.5];
+    var Htot = L1 + 0.5*(L2+L3);
+    var Wtot = 0.866*(L2+L3);
+    var ox = (W - Wtot)/2 + 0.866*L2;
+    var oy = (H - Htot)/2 + L1;
+
+    function Pt(a,b,c){
+      return [ ox + a*A[0]*L1 + b*B[0]*L2 + c*D[0]*L3,
+               oy + a*A[1]*L1 + b*B[1]*L2 + c*D[1]*L3 ];
+    }
+    var O = Pt(0,0,0), VA = Pt(1,0,0), VB = Pt(0,1,0), VD = Pt(0,0,1),
+        VAB = Pt(1,1,0), VAD = Pt(1,0,1), VBD = Pt(0,1,1), VABD = Pt(1,1,1);
+
+    function face(p1,p2,p3,p4,fill){
+      ctx.beginPath();
+      ctx.moveTo(p1[0],p1[1]); ctx.lineTo(p2[0],p2[1]);
+      ctx.lineTo(p3[0],p3[1]); ctx.lineTo(p4[0],p4[1]);
+      ctx.closePath(); ctx.fillStyle = fill; ctx.fill();
+    }
+    // 三个可见面（都含 O 点）
+    face(O, VB, VBD, VD, 'rgba(234,88,12,.055)');   // 上表面
+    face(O, VA, VAD, VD, 'rgba(13,148,136,.075)');  // 前左面
+    face(O, VA, VAB, VB, 'rgba(37,99,235,.065)');   // 前右面
+
+    // 隐藏棱（虚线）
+    var HID = [[VA,VAD],[VA,VAB],[VB,VAB],[VB,VBD],[VD,VBD],[VAD,VABD],[VAB,VABD],[VBD,VABD]];
+    ctx.setLineDash([4,4]);
+    ctx.strokeStyle = 'rgba(120,135,155,.35)'; ctx.lineWidth = 1;
+    HID.forEach(function(e){
+      ctx.beginPath(); ctx.moveTo(e[0][0],e[0][1]); ctx.lineTo(e[1][0],e[1][1]); ctx.stroke();
+    });
+    ctx.setLineDash([]);
+
+    // 彩色棱
+    function edge(p1,p2,color,w){
+      ctx.beginPath(); ctx.moveTo(p1[0],p1[1]); ctx.lineTo(p2[0],p2[1]);
+      ctx.strokeStyle = color; ctx.lineWidth = w; ctx.lineCap = 'round'; ctx.stroke();
+    }
+    // 主棱（从 O 出发）
+    edge(O, VA, COL.blue, 3.2);
+    edge(O, VB, COL.cyan, 3.2);
+    edge(O, VD, COL.orange, 3.2);
+    // 其余棱（按方向着色，细）
+    edge(VB, VAB, COL.blue, 1.5); edge(VD, VAD, COL.blue, 1.5); edge(VBD, VABD, COL.blue, 1.5);
+    edge(VA, VAB, COL.cyan, 1.5); edge(VD, VBD, COL.cyan, 1.5); edge(VAD, VABD, COL.cyan, 1.5);
+    edge(VA, VAD, COL.orange, 1.5); edge(VB, VBD, COL.orange, 1.5); edge(VAB, VABD, COL.orange, 1.5);
+
+    // O 角标记
+    ctx.beginPath(); ctx.arc(O[0],O[1],3,0,Math.PI*2); ctx.fillStyle = '#fff'; ctx.fill();
+    ctx.lineWidth = 2; ctx.strokeStyle = COL.ink; ctx.stroke();
+
+    // 棱标注
+    function edgeLabel(p1,p2,text,color,ox2,oy2){
+      var mx=(p1[0]+p2[0])/2, my=(p1[1]+p2[1])/2;
+      txt(text, mx+ox2, my+oy2, { font:'13px '+FONT_CN, color:color,
+        align: ox2<0?'right':'left' });
+    }
+    edgeLabel(O, VA, 'dr = '+fmt(DR,3), COL.blue, -40, 0);
+    edgeLabel(O, VB, 'r dθ = '+fmt(L2/PXU), COL.cyan, -40, 10);
+    edgeLabel(O, VD, 'r sin θ dφ = '+fmt(L3/PXU), COL.orange, 46, 10);
+
+    // 顶端说明
+    txt('P 点处的体积元（放大）', 12, 16, { font:'12px '+FONT_CN, color:COL.muted, align:'left' });
+    txt('固定比例绘制：框越小 → dV 越小', 12, H-14, { font:'12px '+FONT_CN, color:'#8b95a5', align:'left' });
+
+    /* ---- 侧栏数值与条形 ---- */
+    var mx = Math.max(L1, L2, L3, 1e-6);
+    setTxt('c1', fmt(L1/PXU,3));  setBar('b1', L1/mx*100);
+    setTxt('c2', fmt(L2/PXU,3));  setBar('b2', L2/mx*100);
+    setTxt('c3', fmt(L3/PXU,3));  setBar('b3', L3/mx*100);
+  }
+
+  function setTxt(id, v){ var e = document.getElementById(id); if(e && e.textContent !== v) e.textContent = v; }
+  function setBar(id, pct){ var e = document.getElementById(id); if(e) e.style.width = Math.max(0.6, pct).toFixed(1)+'%'; }
+
+  /* ===================== 面板同步 ===================== */
+  var rngR = document.getElementById('r-rng'),  numR = document.getElementById('r-num');
+  var rngT = document.getElementById('th-rng'), numT = document.getElementById('th-num');
+  var rngP = document.getElementById('ph-rng'), numP = document.getElementById('ph-num');
+
+  function renderPanel(src){
+    if(src !== 'r-rng') rngR.value = S.r;
+    if(src !== 'r-num') numR.value = S.r.toFixed(2);
+    if(src !== 'th-rng') rngT.value = S.th;
+    if(src !== 'th-num') numT.value = S.th;
+    if(src !== 'ph-rng') rngP.value = S.ph;
+    if(src !== 'ph-num') numP.value = S.ph;
+
+    var c = sph2cart(S.r, S.th, S.ph);
+    var st = Math.sin(S.th*RAD), rho = S.r*st;
+    setTxt('co-r', S.r.toFixed(2));
+    setTxt('co-th', String(S.th));
+    setTxt('co-ph', String(S.ph));
+    setTxt('v-x', fmt(c[0]));
+    setTxt('v-y', fmt(c[1]));
+    setTxt('v-z', fmt(c[2]));
+    setTxt('v-sin', fmt(st,3));
+    setTxt('v-rho', fmt(rho));
+    setTxt('v-circ', fmt(rho));
+    document.getElementById('warn').className = (S.th < 3 || S.th > 177) ? 'warn on' : 'warn';
+  }
+
+  function apply(key, val, src){
+    if(!isFinite(val)) return;
+    if(key === 'r'){
+      S.r = clamp(Math.round(val*100)/100, 0.2, 2);
+    } else if(key === 'th'){
+      S.th = clamp(Math.round(val), 0, 180);
+    } else {
+      val = Math.round(val) % 360;
+      if(val < 0) val += 360;
+      S.ph = val;
+    }
+    renderPanel(src);
+    invalidate();
+  }
+
+  rngR.addEventListener('input', function(){ apply('r', parseFloat(this.value), 'r-rng'); });
+  rngT.addEventListener('input', function(){ apply('th', parseFloat(this.value), 'th-rng'); });
+  rngP.addEventListener('input', function(){ apply('ph', parseFloat(this.value), 'ph-rng'); });
+  numR.addEventListener('input', function(){ if(this.value !== '') apply('r', parseFloat(this.value), 'r-num'); });
+  numT.addEventListener('input', function(){ if(this.value !== '') apply('th', parseFloat(this.value), 'th-num'); });
+  numP.addEventListener('input', function(){ if(this.value !== '') apply('ph', parseFloat(this.value), 'ph-num'); });
+  [numR,numT,numP].forEach(function(el){
+    el.addEventListener('blur', function(){ renderPanel('x'); });
+  });
+
+  document.getElementById('t-grid').addEventListener('change', function(){ S.grid = this.checked; invalidate(); });
+  document.getElementById('t-vec').addEventListener('change',  function(){ S.vec  = this.checked; invalidate(); });
+  document.getElementById('t-vol').addEventListener('change',  function(){ S.vol  = this.checked; invalidate(); });
+  document.getElementById('t-proj').addEventListener('change', function(){ S.proj = this.checked; invalidate(); });
+
+  /* ===================== 交互 ===================== */
+  var drag = null;
+
+  function setPFromScreen(mx, my){
+    var V = lastView;
+    if(!V) return;
+    var sx = (mx - V.cx)/V.scale, sy = -(my - V.cy)/V.scale;
+    var r = S.r, d2 = sx*sx + sy*sy, t = 0;
+    if(d2 < r*r*0.985){
+      t = Math.sqrt(r*r - d2);
+    } else {
+      var L = Math.sqrt(d2) || 1, k = (r*0.999)/L;
+      sx *= k; sy *= k;
+    }
+    var px = sx*V.cam.right[0] + sy*V.cam.up[0] + t*V.cam.n[0];
+    var py = sx*V.cam.right[1] + sy*V.cam.up[1] + t*V.cam.n[1];
+    var pz = sx*V.cam.right[2] + sy*V.cam.up[2] + t*V.cam.n[2];
+    var nz = clamp(pz/r, -1, 1);
+    var th = Math.acos(nz)/RAD;
+    var ph = Math.atan2(py, px)/RAD;
+    if(ph < 0) ph += 360;
+    apply('th', th, 'drag');
+    apply('ph', ph, 'drag');
+  }
+
+  cvView.addEventListener('pointerdown', function(e){
+    var rect = cvView.getBoundingClientRect();
+    var mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    var nearP = lastView && Math.hypot(mx - lastView.Pp[0], my - lastView.Pp[1]) < 16;
+    drag = { mode: nearP ? 'p' : 'rot', lx: mx, ly: my, moved: 0 };
+    try { cvView.setPointerCapture(e.pointerId); } catch(err) {}
+    if(drag.mode === 'p') setPFromScreen(mx, my);
+    e.preventDefault();
+  });
+
+  cvView.addEventListener('pointermove', function(e){
+    if(!drag) return;
+    var rect = cvView.getBoundingClientRect();
+    var mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    var dx = mx - drag.lx, dy = my - drag.ly;
+    drag.moved += Math.hypot(dx, dy);
+    if(drag.mode === 'rot'){
+      S.yaw -= dx*0.008;
+      setPitchFromDrag(S.pitch + dy*0.006);
+      invalidate();
+    } else {
+      setPFromScreen(mx, my);
+    }
+    drag.lx = mx; drag.ly = my;
+  });
+
+  function endDrag(e){
+    if(!drag) return;
+    if(drag.mode === 'rot' && drag.moved < 6 && lastView){
+      var rect = cvView.getBoundingClientRect();
+      var mx = e.clientX - rect.left, my = e.clientY - rect.top;
+      if(Math.hypot(mx - lastView.cx, my - lastView.cy) < lastView.scale*0.985) setPFromScreen(mx, my);
+    }
+    drag = null;
+  }
+  cvView.addEventListener('pointerup', endDrag);
+  cvView.addEventListener('pointercancel', function(){ drag = null; });
+
+  cvView.addEventListener('wheel', function(e){
+    e.preventDefault();
+    S.zoom = clamp(S.zoom * Math.exp(-e.deltaY * 0.0012), 0.5, 3.0);
+    invalidate();
+  }, { passive:false });
+
+  /* ===================== 物理情景 · 公共 ===================== */
+  var SCENES = {}, activeScene = 'a1';
+  var SZ = { zoom: 1 };
+
+  function sceneView(cv, k, pitch){
+    fitCanvas(cv);
+    // 关键：画布位图按 devicePixelRatio 放大，绘制坐标却用 CSS 像素，
+    // 必须每次把变换重设成 dpr 比例，否则高 DPI 下内容会缩到左上角、
+    // 且 clearRect 只清掉左上 1/dpr 的区域，残留上一帧的"巨大球体"。
+    cv._ctx.setTransform(cv._dpr,0,0,cv._dpr,0,0);
+    return { ctx:cv._ctx, W:cv._w, H:cv._h, cam:camBasis(pitch),
+             scale:Math.min(cv._w,cv._h)*k*SZ.zoom, cx:cv._w/2, cy:cv._h/2 };
+  }
+  function prj(p,V){ return projectPt(p, V.cam, V.scale, V.cx, V.cy); }
+  function subv(V,cx,cy,scale){ return { cam:V.cam, scale:scale, cx:cx, cy:cy }; }
+
+  function ball(ctx,V,R,o){
+    o = o||{};
+    var rr = R*V.scale;
+    var g = ctx.createRadialGradient(V.cx-rr*.34, V.cy-rr*.38, rr*.05, V.cx, V.cy, rr*1.03);
+    g.addColorStop(0,'rgba(255,255,255,.96)');
+    g.addColorStop(.55,'rgba(230,241,253,.72)');
+    g.addColorStop(1,'rgba(206,226,249,.62)');
+    ctx.beginPath(); ctx.arc(V.cx,V.cy,rr,0,6.2832);
+    ctx.fillStyle=g; ctx.fill();
+    ctx.lineWidth = o.lw||1.3;
+    ctx.strokeStyle = o.stroke||'rgba(37,99,235,.34)';
+    ctx.stroke();
+  }
+  function scalePts(pts,R){
+    var out=[], i;
+    for(i=0;i<pts.length;i++) out.push([pts[i][0]*R, pts[i][1]*R, pts[i][2]*R]);
+    return out;
+  }
+  function grid3(ctx,V,R,a){
+    var o={color:COL.grid,aBack:a*.35,aFront:a,width:1,dref:R}, i;
+    for(i=0;i<GRID_M.length;i++) drawCurve3(ctx, scalePts(GRID_M[i],R), o, V);
+    for(i=0;i<GRID_P.length;i++) drawCurve3(ctx, scalePts(GRID_P[i],R), o, V);
+  }
+  function axis3(ctx,V,ax,len,name,color){
+    var O=prj([0,0,0],V), A=prj([ax[0]*len,ax[1]*len,ax[2]*len],V);
+    ctx.beginPath(); ctx.moveTo(O[0],O[1]); ctx.lineTo(A[0],A[1]);
+    ctx.strokeStyle=color; ctx.lineWidth=1.4; ctx.stroke();
+    arrowHead(ctx,O[0],O[1],A[0],A[1],color,7);
+    if(name){
+      var t=prj([ax[0]*len*1.1,ax[1]*len*1.1,ax[2]*len*1.1],V);
+      makeTxt(ctx)(name,t[0],t[1],{font:'italic 14px "Cambria Math","Times New Roman",serif',color:color});
+    }
+  }
+  // 球面带的填充（θ1→θ2 之间的一圈）
+  function bandFill(ctx,V,R,th1,th2,fill,N){
+    N = N||64;
+    var i,a, outer=[], inner=[];
+    for(i=0;i<=N;i++){
+      a=i/N*2*Math.PI;
+      outer.push([R*Math.sin(th2)*Math.cos(a),R*Math.sin(th2)*Math.sin(a),R*Math.cos(th2)]);
+      inner.push([R*Math.sin(th1)*Math.cos(a),R*Math.sin(th1)*Math.sin(a),R*Math.cos(th1)]);
+    }
+    ctx.beginPath();
+    for(i=0;i<=N;i++){ var q=prj(outer[i],V); i?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1]); }
+    for(i=N;i>=0;i--){ var q2=prj(inner[i],V); ctx.lineTo(q2[0],q2[1]); }
+    ctx.closePath(); ctx.fillStyle=fill; ctx.fill();
+  }
+
+  /* ---------- 2D 小图 ---------- */
+  function plot2d(cv,o){
+    fitCanvas(cv);
+    var ctx=cv._ctx, W=cv._w, H=cv._h;
+    ctx.setTransform(cv._dpr,0,0,cv._dpr,0,0);
+    ctx.clearRect(0,0,W,H);
+    var L=36, Rm=10, T=12, B=20;
+    var x0=L, x1=W-Rm, y0=T, y1=H-B;
+    function X(x){ return x0+(x-o.x0)/(o.x1-o.x0)*(x1-x0); }
+    function Y(y){ return y1-(y-o.y0)/(o.y1-o.y0)*(y1-y0); }
+    ctx.strokeStyle='#eff3f9'; ctx.lineWidth=1;
+    for(var i=0;i<=3;i++){ var yy=y0+(y1-y0)*i/3; ctx.beginPath(); ctx.moveTo(x0,yy); ctx.lineTo(x1,yy); ctx.stroke(); }
+    // 阴影
+    if(o.shade){
+      var sx0=X(Math.max(o.x0,o.shade[0])), sx1=X(Math.min(o.x1,o.shade[1]));
+      ctx.fillStyle=o.shadeColor||'rgba(37,99,235,.10)';
+      ctx.fillRect(sx0,y0,Math.max(0,sx1-sx0),y1-y0);
+    }
+    ctx.strokeStyle='#cbd5e2'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x0,y1); ctx.lineTo(x1,y1); ctx.stroke();
+    (o.curves||[]).forEach(function(c){
+      ctx.beginPath();
+      c.pts.forEach(function(p,i){ var px=X(p[0]),py=Y(p[1]); i?ctx.lineTo(px,py):ctx.moveTo(px,py); });
+      ctx.strokeStyle=c.color; ctx.lineWidth=c.w||2; ctx.lineJoin='round'; ctx.stroke();
+      if(c.fill){
+        ctx.lineTo(X(c.pts[c.pts.length-1][0]),y1); ctx.lineTo(X(c.pts[0][0]),y1); ctx.closePath();
+        ctx.fillStyle=c.fill; ctx.fill();
+      }
+    });
+    var tx=makeTxt(ctx);
+    (o.marks||[]).forEach(function(m){
+      var px=X(m.x);
+      ctx.beginPath(); ctx.setLineDash([3,3]);
+      ctx.moveTo(px,y0); ctx.lineTo(px,y1);
+      ctx.strokeStyle=m.color||'#94a3b8'; ctx.lineWidth=1.2; ctx.stroke(); ctx.setLineDash([]);
+      if(m.label) tx(m.label, px, y0+1, {font:'11px '+FONT_CN, color:m.color||'#94a3b8', base:'top'});
+    });
+    if(o.dot){
+      ctx.beginPath(); ctx.arc(X(o.dot[0]),Y(o.dot[1]),3.6,0,6.2832);
+      ctx.fillStyle=o.dotColor||COL.blue; ctx.fill();
+      ctx.lineWidth=1.6; ctx.strokeStyle='#fff'; ctx.stroke();
+    }
+    (o.xticks||[]).forEach(function(t){
+      tx(t.label, X(t.x), y1+3, {font:'11px '+FONT_CN, color:'#94a3b8', base:'top'});
+    });
+    (o.yticks||[]).forEach(function(t){
+      tx(t.label, x0-4, Y(t.y), {font:'11px '+FONT_CN, color:'#94a3b8', align:'right'});
+    });
+    if(o.xlabel) tx(o.xlabel, (x0+x1)/2, H-1, {font:'11px '+FONT_CN, color:'#8b95a5', base:'bottom'});
+  }
+
+  /* ---------- 带动画的画布：拖动旋转 / 滚轮缩放 ---------- */
+  function attachOrbit(cv){
+    var d=null;
+    cv.addEventListener('pointerdown', function(e){
+      d={x:e.clientX,y:e.clientY};
+      try{ cv.setPointerCapture(e.pointerId); }catch(err){}
+      e.preventDefault();
+    });
+    cv.addEventListener('pointermove', function(e){
+      if(!d) return;
+      var dx=e.clientX-d.x, dy=e.clientY-d.y;
+      d.x=e.clientX; d.y=e.clientY;
+      S.yaw -= dx*0.008;
+      setPitchFromDrag(S.pitch + dy*0.006);
+      needsMain = true; needsScene = true;
+    });
+    cv.addEventListener('pointerup', function(){ d=null; });
+    cv.addEventListener('pointercancel', function(){ d=null; });
+    cv.addEventListener('wheel', function(e){
+      e.preventDefault();
+      SZ.zoom = clamp(SZ.zoom*Math.exp(-e.deltaY*0.0012), 0.5, 2.6);
+      needsScene = true;
+    }, {passive:false});
+  }
+
+  /* ===================== A1 球壳转动惯量 ===================== */
+  var A1 = { t: 90 };
+  A1.draw = function(){
+    var V = sceneView(document.getElementById('cv-a1'), 0.33);
+    var ctx=V.ctx, txt=makeTxt(ctx), R=1;
+    ctx.clearRect(0,0,V.W,V.H);
+    ball(ctx,V,R,{});
+    grid3(ctx,V,R,0.30);
+
+    var t = A1.t*RAD;
+    // 已扫过的球冠：按经线切片填充，避免投影自交
+    if(t > 0.004){
+      for(var k=0;k<48;k++){
+        var p1=k*2*Math.PI/48, p2=(k+1)*2*Math.PI/48, pts=[[0,0,R]], i, tt, pp;
+        for(i=1;i<=5;i++){ tt=t*i/5; pts.push([R*Math.sin(tt)*Math.cos(p1),R*Math.sin(tt)*Math.sin(p1),R*Math.cos(tt)]); }
+        for(i=1;i<=5;i++){ pp=p1+(p2-p1)*i/5; pts.push([R*Math.sin(t)*Math.cos(pp),R*Math.sin(t)*Math.sin(pp),R*Math.cos(t)]); }
+        for(i=4;i>=1;i--){ tt=t*i/5; pts.push([R*Math.sin(tt)*Math.cos(p2),R*Math.sin(tt)*Math.sin(p2),R*Math.cos(tt)]); }
+        ctx.beginPath();
+        for(i=0;i<pts.length;i++){ var q=prj(pts[i],V); i?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1]); }
+        ctx.closePath();
+        ctx.fillStyle='rgba(37,99,235,.13)'; ctx.fill();
+      }
+    }
+    // 当前环带 θ → θ+8°
+    var t2 = Math.min(Math.PI, t+8*RAD);
+    if(t2 > t+0.002) bandFill(ctx,V,R,t,t2,'rgba(234,88,12,.55)');
+    // 环带上下沿
+    var par=[], par2=[];
+    for(var m=0;m<=72;m++){
+      var a=m/72*2*Math.PI;
+      par.push([R*Math.sin(t)*Math.cos(a),R*Math.sin(t)*Math.sin(a),R*Math.cos(t)]);
+      par2.push([R*Math.sin(t2)*Math.cos(a),R*Math.sin(t2)*Math.sin(a),R*Math.cos(t2)]);
+    }
+    drawCurve3(ctx,par,{color:COL.orange,aBack:.55,aFront:1,width:2.4,dref:1},V);
+    drawCurve3(ctx,par2,{color:COL.orange,aBack:.35,aFront:.75,width:1.4,dref:1},V);
+    // z 轴（转轴）
+    axis3(ctx,V,[0,0,1],1.32,'z',COL.axis);
+    // 环带到轴的距离 R sinθ
+    var zc=R*Math.cos(t), rho=R*Math.sin(t);
+    if(rho > 0.05){
+      var A=prj([0,0,zc],V), B=prj([rho,0,zc],V);
+      ctx.beginPath(); ctx.moveTo(A[0],A[1]); ctx.lineTo(B[0],B[1]);
+      ctx.strokeStyle=COL.blue; ctx.lineWidth=2.2; ctx.stroke();
+      txt('R sin θ = '+fmt(rho), (A[0]+B[0])/2, (A[1]+B[1])/2-15,
+          {font:'13px '+FONT_CN, color:COL.blue, haloW:5});
+    }
+    // 极点标记
+    var pole=prj([0,0,R*1.03],V);
+    txt('θ = '+A1.t.toFixed(0)+'°', pole[0]-10, pole[1]-14,
+        {font:'13px '+FONT_CN, color:COL.orange, align:'right', haloW:5});
+
+    var ct=Math.cos(t);
+    setTxt('a1-mass', (0.5*(1-ct)).toFixed(3));
+    var jv=0.5*(ct*ct*ct/3 - ct + 2/3);
+    if(Math.abs(jv)<5e-5) jv=0;              // 避免 0 显示成 -0.0000
+    setTxt('a1-j', jv.toFixed(4));
+    setTxt('a1-sin', Math.sin(t).toFixed(3));
+    setTxt('a1-per', (6.2832*Math.sin(t)).toFixed(3));
+
+    var pts=[], i2;
+    for(i2=0;i2<=90;i2++){ var d=i2/90*180*RAD; pts.push([i2/90*180, Math.pow(Math.sin(d),3)]); }
+    plot2d(document.getElementById('ch-a1'),{
+      x0:0,x1:180,y0:0,y1:1.08,
+      shade:[0,A1.t], shadeColor:'rgba(37,99,235,.09)',
+      curves:[{pts:pts,color:COL.blue,w:2.2,fill:'rgba(37,99,235,.06)'}],
+      marks:[{x:90,label:'90°',color:'#b6c2d2'}],
+      dot:[A1.t, Math.pow(Math.sin(t),3)],
+      xticks:[{x:0,label:'0°'},{x:90,label:'90°'},{x:180,label:'180°'}],
+      yticks:[{y:0,label:'0'},{y:1,label:'1'}],
+      xlabel:'θ（从北极量到南极）｜纵轴：sin³θ'
+    });
+  };
+
+  /* ===================== A2 高斯定理 / 撒点 ===================== */
+  var A2 = { r: 1.00, mode: 'costheta' };
+  var A2DOTS = (function(){
+    var th=[], cs=[], t, p, i;
+    for(t=10;t<=170;t+=10) for(p=0;p<360;p+=10) th.push([t,p]);
+    var N=th.length;
+    for(i=0;i<N;i++){
+      cs.push([Math.acos(-1+(2*i+1)/N)/RAD, (i*137.507764)%360]);
+    }
+    return { theta:th, cos:cs, n:N };
+  })();
+
+  A2.draw = function(){
+    var V = sceneView(document.getElementById('cv-a2'), 0.33);
+    var ctx=V.ctx, txt=makeTxt(ctx), R=A2.r;
+    ctx.clearRect(0,0,V.W,V.H);
+    ball(ctx,V,R,{});
+    grid3(ctx,V,R,0.22);
+
+    // 场线：从球面射出的短箭头
+    var N=18, dirs=[], i;
+    for(i=0;i<N;i++){
+      dirs.push(Math.acos(-1+(2*i+1)/N)/RAD);
+    }
+    for(i=0;i<N;i++){
+      var th=dirs[i], ph=(i*137.5)%360;
+      var a=sph2cart(R*1.02,th,ph), b=sph2cart(R*1.30,th,ph);
+      var A=prj(a,V), B=prj(b,V);
+      ctx.beginPath(); ctx.moveTo(A[0],A[1]); ctx.lineTo(B[0],B[1]);
+      ctx.strokeStyle='rgba(70,83,107,.42)'; ctx.lineWidth=1.2; ctx.stroke();
+      arrowHead(ctx,A[0],A[1],B[0],B[1],'rgba(70,83,107,.55)',6);
+    }
+    // 中心电荷
+    var O=prj([0,0,0],V);
+    ctx.beginPath(); ctx.arc(O[0],O[1],5,0,6.2832);
+    ctx.fillStyle='#fff'; ctx.fill(); ctx.lineWidth=2.4; ctx.strokeStyle='#b91c1c'; ctx.stroke();
+    txt('q', O[0]+11, O[1]+16, {font:'italic 14px "Cambria Math","Times New Roman",serif', color:'#b91c1c'});
+
+    // 撒点
+    var set = A2.mode==='theta' ? A2DOTS.theta : A2DOTS.cos;
+    var col = A2.mode==='theta' ? COL.orange : COL.cyan;
+    for(i=0;i<set.length;i++){
+      var p3=sph2cart(R, set[i][0], set[i][1]);
+      var q=prj(p3,V);
+      var al=0.25+0.62*clamp((q[2]/R+1)/2,0,1);
+      ctx.beginPath(); ctx.arc(q[0],q[1],2.2,0,6.2832);
+      ctx.fillStyle=rgba(col,al); ctx.fill();
+    }
+    txt(A2.mode==='theta'?'θ 均匀：两极挤成一团':'cos θ 均匀：整球面一样密',
+        14, 18, {font:'13px '+FONT_CN, color:col, align:'left', haloW:5});
+
+    setTxt('a2-area', (4*Math.PI*R*R).toFixed(2));
+    setTxt('a2-e', (1/(R*R)).toFixed(3));
+    setTxt('a2-flux', (4*Math.PI).toFixed(2));
+    setTxt('a2-n', String(A2DOTS.n));
+
+    var c1=[], c2=[], j;
+    for(j=1;j<=90;j++){
+      var d=j/90*Math.PI, s=Math.sin(d);
+      c1.push([j, Math.min(4, 0.6366/Math.max(s,1e-4))]);
+      c2.push([j, 1]);
+    }
+    plot2d(document.getElementById('ch-a2'),{
+      x0:0,x1:180,y0:0,y1:4.1,
+      curves:[
+        {pts:c1,color:COL.orange,w:A2.mode==='theta'?2.2:1.2},
+        {pts:c2,color:COL.cyan,w:A2.mode==='theta'?1.2:2.2}
+      ],
+      marks:[{x:90,label:'90°',color:'#b6c2d2'}],
+      xticks:[{x:0,label:'0°'},{x:90,label:'90°'},{x:180,label:'180°'}],
+      yticks:[{y:1,label:'1'},{y:3,label:'3'}],
+      xlabel:'θ（极角）｜纵轴：每单位面积的点数（相对）'
+    });
+  };
+
+  /* ===================== A3 麦克斯韦速率分布 ===================== */
+  var A3 = { T: 300, v: 1.0 };
+  var RGAS = 8.314, MMOL = 0.028;
+  function a3rates(){
+    var T=A3.T, M=MMOL, Rg=RGAS;
+    return {
+      vp: Math.sqrt(2*Rg*T/M),
+      vb: Math.sqrt(8*Rg*T/(Math.PI*M)),
+      vr: Math.sqrt(3*Rg*T/M)
+    };
+  }
+  function fMax(v){
+    var a = MMOL/(2*Math.PI*RGAS*A3.T);
+    return 4*Math.PI*Math.pow(a,1.5)*v*v*Math.exp(-MMOL*v*v/(2*RGAS*A3.T));
+  }
+  A3.draw = function(){
+    var V = sceneView(document.getElementById('cv-a3'), 0.33);
+    var ctx=V.ctx, txt=makeTxt(ctx);
+    ctx.clearRect(0,0,V.W,V.H);
+
+    var rr = a3rates();
+    var Rv = 0.40 + 0.52*(A3.v/2.5);      // 球壳半径（显示单位）
+    // 外侧薄壳
+    ball(ctx,V, Rv*1.05, {stroke:'rgba(37,99,235,.20)'});
+    ball(ctx,V, Rv, {stroke:'rgba(37,99,235,.55)', lw:1.8});
+    grid3(ctx,V,Rv,0.26);
+    axis3(ctx,V,[1,0,0],1.16,'','rgba(70,83,107,.30)');
+    axis3(ctx,V,[0,0,1],1.16,'v',COL.axis);
+
+    var T=prj([0,0,Rv*1.05],V);
+    txt('以 v 为半径的球面', V.W/2, 16, {font:'13px '+FONT_CN, color:COL.muted});
+    txt('4πv²', T[0]+10, T[1]-12, {font:'13px '+FONT_CN, color:COL.blue, align:'left'});
+
+    var v = A3.v*rr.vp;
+    var fv = fMax(v);
+    setTxt('a3-vp', rr.vp.toFixed(0));
+    setTxt('a3-vb', rr.vb.toFixed(0));
+    setTxt('a3-vr', rr.vr.toFixed(0));
+    setTxt('a3-fv', (fv*1000).toFixed(2));
+
+    // f(v) 曲线，横轴按 v/vp
+    var fmax=0, pts=[], i;
+    for(i=0;i<=120;i++){
+      var x=i/120*3;
+      var y=fMax(x*rr.vp);
+      if(y>fmax) fmax=y;
+      pts.push([x,y]);
+    }
+    var norm=pts.map(function(p){ return [p[0], p[1]/fmax]; });
+    plot2d(document.getElementById('ch-a3'),{
+      x0:0,x1:3,y0:0,y1:1.1,
+      curves:[{pts:norm,color:COL.blue,w:2.2,fill:'rgba(37,99,235,.05)'}],
+      marks:[
+        {x:1,label:'v_p',color:'#2563eb'},
+        {x:rr.vb/rr.vp,label:'v̄',color:'#0d9488'},
+        {x:rr.vr/rr.vp,label:'v_rms',color:'#ea580c'}
+      ],
+      dot:[A3.v, fv/fmax],
+      xticks:[{x:0,label:'0'},{x:1,label:'1'},{x:2,label:'2'},{x:3,label:'3 v_p'}],
+      yticks:[{y:1,label:'峰'}],
+      xlabel:'v（单位 v_p）｜纵轴：f(v) 相对峰值'
+    });
+  };
+
+  /* ===================== A4 圆锥摆 ===================== */
+  var A4 = { a: 40, w: 2.0, playing: false, t: 0 };
+  A4.isPlaying = function(){ return A4.playing; };
+  A4.update = function(dt){ A4.t += A4.w*dt; };
+  A4.draw = function(){
+    var V = sceneView(document.getElementById('cv-a4'), 0.46);
+    V.cy = V.H*0.72;                      // 锥顶下移，避免下半屏空着
+    var ctx=V.ctx, txt=makeTxt(ctx);
+    ctx.clearRect(0,0,V.W,V.H);
+    var L=1, al=A4.a*RAD, sa=Math.sin(al), ca=Math.cos(al), w=A4.w;
+
+    // 锥面母线
+    for(var k=0;k<16;k++){
+      var ph=k/16*2*Math.PI;
+      var A=prj([0,0,0],V), B=prj([L*sa*Math.cos(ph),L*sa*Math.sin(ph),L*ca],V);
+      ctx.beginPath(); ctx.moveTo(A[0],A[1]); ctx.lineTo(B[0],B[1]);
+      ctx.strokeStyle='rgba(148,163,184,.25)'; ctx.lineWidth=1; ctx.stroke();
+    }
+    // 纬线圈
+    var circ=[];
+    for(var m=0;m<=72;m++){ var a2=m/72*2*Math.PI; circ.push([L*sa*Math.cos(a2),L*sa*Math.sin(a2),L*ca]); }
+    drawCurve3(ctx,circ,{color:COL.orange,aBack:.5,aFront:.95,width:1.8,dref:L*sa},V);
+    // 转轴
+    axis3(ctx,V,[0,0,1],1.30,'z',COL.axis);
+    // O
+    var O=prj([0,0,0],V);
+    ctx.beginPath(); ctx.arc(O[0],O[1],3,0,6.2832); ctx.fillStyle=COL.axis; ctx.fill();
+
+    // 质点
+    var ph0=A4.t% (2*Math.PI);
+    var Pw=[L*sa*Math.cos(ph0), L*sa*Math.sin(ph0), L*ca];
+    var Pp=prj(Pw,V);
+    // 绳
+    ctx.beginPath(); ctx.moveTo(O[0],O[1]); ctx.lineTo(Pp[0],Pp[1]);
+    ctx.strokeStyle='rgba(31,41,55,.75)'; ctx.lineWidth=1.8; ctx.stroke();
+
+    // 各分量
+    var ar = -L*sa*sa*w*w;
+    var at = -L*sa*ca*w*w;
+    var am = L*sa*w*w;
+    var v  = L*sa*w;
+    // e_r, e_θ, e_φ
+    var er=[sa*Math.cos(ph0), sa*Math.sin(ph0), ca];
+    var et=[ca*Math.cos(ph0), ca*Math.sin(ph0), -sa];
+    var ep=[-Math.sin(ph0), Math.cos(ph0), 0];
+    var K = am>1e-9 ? 0.52/am : 0;    // 归一化：合加速度箭头长 0.52
+
+    function vec(base,dir,len,color,wid,dash){
+      var tip=[base[0]+dir[0]*len, base[1]+dir[1]*len, base[2]+dir[2]*len];
+      var A2p=prj(base,V), B2p=prj(tip,V);
+      ctx.beginPath();
+      if(dash) ctx.setLineDash([4,3]);
+      ctx.moveTo(A2p[0],A2p[1]); ctx.lineTo(B2p[0],B2p[1]);
+      ctx.strokeStyle=color; ctx.lineWidth=wid; ctx.stroke();
+      ctx.setLineDash([]);
+      arrowHead(ctx,A2p[0],A2p[1],B2p[0],B2p[1],color,7);
+      return [B2p[0],B2p[1]];
+    }
+    function outLabel(tip,s,col){
+      var dx=tip[0]-Pp[0], dy=tip[1]-Pp[1], L=Math.hypot(dx,dy)||1;
+      txt(s, tip[0]+dx/L*15, tip[1]+dy/L*15, {font:'13px '+FONT_CN, color:col});
+    }
+    // 速度：沿 e_φ
+    var vTip = vec(Pw, ep, 0.34, COL.orange, 2.2);
+    // a_r 与 a_θ：沿 -e_r / -e_θ
+    var rTip = vec(Pw, [-er[0],-er[1],-er[2]], Math.abs(ar)*K, COL.blue, 2.0, true);
+    var tTip = vec(Pw, [-et[0],-et[1],-et[2]], Math.abs(at)*K, COL.cyan, 2.0, true);
+    // 合加速度：指向轴的水平方向
+    var arv=[er[0]*ar, er[1]*ar, er[2]*ar];
+    var atv=[et[0]*at, et[1]*at, et[2]*at];
+    var sum=[arv[0]+atv[0], arv[1]+atv[1], arv[2]+atv[2]];
+    var sl=Math.hypot(sum[0],sum[1],sum[2])||1;
+    vec(Pw, [sum[0]/sl,sum[1]/sl,sum[2]/sl], 0.52, '#1f2937', 2.6);
+    // 平行四边形辅助虚线
+    (function(){
+      var tR=prj([Pw[0]+arv[0]*K, Pw[1]+arv[1]*K, Pw[2]+arv[2]*K],V);
+      var tT=prj([Pw[0]+atv[0]*K, Pw[1]+atv[1]*K, Pw[2]+atv[2]*K],V);
+      var tS=prj([Pw[0]+sum[0]*K, Pw[1]+sum[1]*K, Pw[2]+sum[2]*K],V);
+      ctx.setLineDash([3,3]);
+      ctx.strokeStyle='rgba(120,135,155,.6)'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(tR[0],tR[1]); ctx.lineTo(tS[0],tS[1]); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(tT[0],tT[1]); ctx.lineTo(tS[0],tS[1]); ctx.stroke();
+      ctx.setLineDash([]);
+    })();
+
+    // α 角标记（原点处，z 轴与绳之间）
+    (function(){
+      var arcA=[], n=14, i;
+      for(i=0;i<=n;i++){ var t=al*i/n; arcA.push([0.26*Math.sin(t)*Math.cos(ph0),0.26*Math.sin(t)*Math.sin(ph0),0.26*Math.cos(t)]); }
+      ctx.beginPath();
+      for(i=0;i<arcA.length;i++){ var q=prj(arcA[i],V); i?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1]); }
+      ctx.strokeStyle='rgba(70,83,107,.7)'; ctx.lineWidth=1.4; ctx.stroke();
+      var m0=prj([0.34*Math.sin(al/2)*Math.cos(ph0),0.34*Math.sin(al/2)*Math.sin(ph0),0.34*Math.cos(al/2)],V);
+      txt('α', m0[0], m0[1], {font:'italic 15px "Cambria Math","Times New Roman",serif', color:COL.axis});
+    })();
+
+    // 质点
+    ctx.beginPath(); ctx.arc(Pp[0],Pp[1],5.4,0,6.2832);
+    ctx.fillStyle='#fff'; ctx.fill(); ctx.lineWidth=2.4; ctx.strokeStyle=COL.ink; ctx.stroke();
+    txt('m', Pp[0]+10, Pp[1]+18, {font:'italic 15px "Cambria Math","Times New Roman",serif', color:COL.ink, align:'left'});
+    // a_r 与绳重合，标签改到绳的外侧（垂直方向）避免压线
+    (function(){ var dx=rTip[0]-Pp[0], dy=rTip[1]-Pp[1], ll=Math.hypot(dx,dy)||1;
+      txt('a_r', rTip[0]+dy/ll*15, rTip[1]-dx/ll*15, {font:'13px '+FONT_CN, color:COL.blue}); })();
+    outLabel(tTip,'a_θ',COL.cyan);
+    outLabel(vTip,'v',COL.orange);
+
+    setTxt('a4-ar', ar.toFixed(2));
+    setTxt('a4-at', at.toFixed(2));
+    setTxt('a4-ap', '0.00');
+    setTxt('a4-am', am.toFixed(2));
+    setTxt('a4-v', v.toFixed(2));
+    setTxt('a4-wg', Math.sqrt(9.8/(L*ca)).toFixed(2));
+  };
+
+  /* ===================== B1 均匀带电球壳 ===================== */
+  var B1 = { r: 1.40 };
+  B1.draw = function(){
+    var V = sceneView(document.getElementById('cv-b1'), 0.31);
+    var ctx=V.ctx, txt=makeTxt(ctx), R=1;
+    ctx.clearRect(0,0,V.W,V.H);
+    ball(ctx,V,R,{});
+    grid3(ctx,V,R,0.26);
+
+    // 壳外场线
+    for(var i=0;i<18;i++){
+      var th=Math.acos(-1+(2*i+1)/18)/RAD, ph=(i*137.5)%360;
+      var A=prj(sph2cart(R*1.01,th,ph),V), B=prj(sph2cart(R*1.55,th,ph),V);
+      ctx.beginPath(); ctx.moveTo(A[0],A[1]); ctx.lineTo(B[0],B[1]);
+      ctx.strokeStyle='rgba(37,99,235,.45)'; ctx.lineWidth=1.3; ctx.stroke();
+      arrowHead(ctx,A[0],A[1],B[0],B[1],'rgba(37,99,235,.6)',6);
+    }
+    axis3(ctx,V,[0,0,1],1.6,'z',COL.axis);
+    axis3(ctx,V,[1,0,0],1.2,'','rgba(70,83,107,.25)');
+
+    var r=B1.r, E= r<1 ? 0 : 1/(r*r);
+    // 观察点的球面
+    if(Math.abs(r-1)>0.02){
+      var par=[];
+      for(var m=0;m<=64;m++){ var a=m/64*2*Math.PI; par.push([r*Math.sin(80*RAD)*Math.cos(a), r*Math.sin(80*RAD)*Math.sin(a), r*Math.cos(80*RAD)]); }
+      drawCurve3(ctx,par,{color:'#9aa8bb',aBack:.35,aFront:.7,width:1.3,dref:r},V);
+    }
+    var pos=sph2cart(r,80,40), Pp=prj(pos,V);
+    // O→观察点
+    var O=prj([0,0,0],V);
+    ctx.beginPath(); ctx.setLineDash([4,4]);
+    ctx.moveTo(O[0],O[1]); ctx.lineTo(Pp[0],Pp[1]);
+    ctx.strokeStyle='rgba(70,83,107,.4)'; ctx.lineWidth=1.2; ctx.stroke(); ctx.setLineDash([]);
+    // E 箭头
+    var dir=[Math.sin(80*RAD)*Math.cos(40*RAD), Math.sin(80*RAD)*Math.sin(40*RAD), Math.cos(80*RAD)];
+    if(E>0){
+      var tip=[pos[0]+dir[0]*0.62*E, pos[1]+dir[1]*0.62*E, pos[2]+dir[2]*0.62*E];
+      var T=prj(tip,V);
+      ctx.beginPath(); ctx.moveTo(Pp[0],Pp[1]); ctx.lineTo(T[0],T[1]);
+      ctx.strokeStyle=COL.blue; ctx.lineWidth=2.6; ctx.stroke();
+      arrowHead(ctx,Pp[0],Pp[1],T[0],T[1],COL.blue,8);
+      txt('E', T[0]+10, T[1]-8, {font:'italic 15px "Cambria Math","Times New Roman",serif', color:COL.blue});
+    }
+    ctx.beginPath(); ctx.arc(Pp[0],Pp[1],4.4,0,6.2832);
+    ctx.fillStyle='#fff'; ctx.fill(); ctx.lineWidth=2; ctx.strokeStyle=COL.ink; ctx.stroke();
+    txt(E>0?'P':'P（壳内 E = 0）', Pp[0]+12, Pp[1]+12, {font:'13px '+FONT_CN, color:COL.ink, align:'left'});
+
+    setTxt('b1-zone', r<1 ? '壳内' : '壳外');
+    setTxt('b1-e', E.toFixed(3));
+    setTxt('b1-cmp', r<1 ? '0（壳内无场）' : '完全相同');
+
+    var pts=[], i2;
+    for(i2=0;i2<=120;i2++){
+      var x=i2/120*2.5;
+      pts.push([x, x<1 ? 0 : 1/(x*x)]);
+    }
+    plot2d(document.getElementById('ch-b1'),{
+      x0:0,x1:2.5,y0:0,y1:1.1,
+      curves:[{pts:pts,color:COL.blue,w:2.2,fill:'rgba(37,99,235,.06)'}],
+      marks:[{x:1,label:'R',color:'#b6c2d2'}],
+      dot:[r,E],
+      xticks:[{x:0,label:'0'},{x:1,label:'R'},{x:2,label:'2R'}],
+      yticks:[{y:1,label:'1'}],
+      xlabel:'r（单位 R）｜纵轴：E ÷ (kq/R²)'
+    });
+  };
+
+  /* ===================== B2 开普勒轨道 ===================== */
+  var B2 = { e: 0.5, M: 1.2, playing: false };
+  B2.isPlaying = function(){ return B2.playing; };
+  B2.update = function(dt){ B2.M = (B2.M + dt*2*Math.PI/9) % (2*Math.PI); };
+  function kepler(M,e){
+    var E=M, i;
+    for(i=0;i<8;i++){
+      E = E - (E - e*Math.sin(E) - M)/(1 - e*Math.cos(E));
+    }
+    return E;
+  }
+  function orbPhi(M,e){
+    var E=kepler(M,e);
+    return { phi: 2*Math.atan2(Math.sqrt(1+e)*Math.sin(E/2), Math.sqrt(1-e)*Math.cos(E/2)),
+             r: 1*(1-e*Math.cos(E)) };
+  }
+  B2.draw = function(){
+    var V = sceneView(document.getElementById('cv-b2'), 0.33, 52*RAD);
+    var ctx=V.ctx, txt=makeTxt(ctx);
+    ctx.clearRect(0,0,V.W,V.H);
+    var e=B2.e, b=Math.sqrt(1-e*e), p=1-e*e;
+
+    // 轨道
+    var orb=[];
+    for(var i=0;i<=240;i++){
+      var ph=i/240*2*Math.PI, rr=p/(1+e*Math.cos(ph));
+      orb.push([rr*Math.cos(ph), rr*Math.sin(ph), 0]);
+    }
+    drawCurve3(ctx,orb,{color:'#8ea3bd',aBack:.55,aFront:.95,width:1.8,dref:1.8},V);
+
+    // 已扫过的扇形（从近日点起）——先画作底色
+    var swept=[[0,0,0]], n2=40, j2;
+    for(j2=0;j2<=n2;j2++){
+      var q2=orbPhi(B2.M*j2/n2, e);
+      swept.push([q2.r*Math.cos(q2.phi), q2.r*Math.sin(q2.phi), 0]);
+    }
+    ctx.beginPath();
+    for(j2=0;j2<swept.length;j2++){ var P2=prj(swept[j2],V); j2?ctx.lineTo(P2[0],P2[1]):ctx.moveTo(P2[0],P2[1]); }
+    ctx.closePath();
+    ctx.fillStyle='rgba(37,99,235,.07)'; ctx.fill();
+
+    // 等时扇形：各取 1/10 周期 → 面积必然相同
+    function sector(M0,M1,fill,edge,label,lc){
+      var pts=[[0,0,0]], n=26, j;
+      for(j=0;j<=n;j++){
+        var M=M0+(M1-M0)*j/n, q=orbPhi(M,e);
+        pts.push([q.r*Math.cos(q.phi), q.r*Math.sin(q.phi), 0]);
+      }
+      ctx.beginPath();
+      for(j=0;j<pts.length;j++){ var P=prj(pts[j],V); j?ctx.lineTo(P[0],P[1]):ctx.moveTo(P[0],P[1]); }
+      ctx.closePath();
+      ctx.fillStyle=fill; ctx.fill();
+      if(edge){ ctx.strokeStyle=edge; ctx.lineWidth=1.2; ctx.stroke(); }
+      if(label){
+        var qm=orbPhi((M0+M1)/2,e);
+        var pm=prj([qm.r*0.56*Math.cos(qm.phi), qm.r*0.56*Math.sin(qm.phi), 0],V);
+        txt(label, pm[0], pm[1], {font:'12px '+FONT_CN, color:lc});
+      }
+    }
+    var dM=2*Math.PI/10;
+    sector(0, dM, 'rgba(37,99,235,.16)', 'rgba(37,99,235,.45)', 'Δt', '#1d4ed8');
+    sector(Math.PI-dM/2, Math.PI+dM/2, 'rgba(234,88,12,.16)', 'rgba(234,88,12,.45)', 'Δt', '#c2410c');
+
+    // 焦点（引力源）
+    var O=prj([0,0,0],V);
+    ctx.beginPath(); ctx.arc(O[0],O[1],6,0,6.2832);
+    ctx.fillStyle='#f59e0b'; ctx.fill();
+    ctx.lineWidth=1.5; ctx.strokeStyle='#b45309'; ctx.stroke();
+    txt('引力源（焦点）', O[0]+10, O[1]+22, {font:'12px '+FONT_CN, color:'#b45309', align:'left'});
+
+    // 行星
+    var cur=orbPhi(B2.M,e);
+    var Pp=prj([cur.r*Math.cos(cur.phi), cur.r*Math.sin(cur.phi), 0],V);
+    ctx.beginPath(); ctx.arc(Pp[0],Pp[1],5,0,6.2832);
+    ctx.fillStyle='#fff'; ctx.fill(); ctx.lineWidth=2.4; ctx.strokeStyle='#2563eb'; ctx.stroke();
+    txt('m', Pp[0]+11, Pp[1]-10, {font:'italic 14px "Cambria Math","Times New Roman",serif', color:COL.blue});
+
+    txt('两块阴影：时间一样长 → 面积一样大', V.W/2, 16, {font:'13px '+FONT_CN, color:COL.muted});
+
+    setTxt('b2-da', (Math.PI*b).toFixed(3));
+    setTxt('b2-sec', '10.0%');
+    setTxt('b2-vr', ((1+e)/(1-e)).toFixed(2));
+    setTxt('b2-r', cur.r.toFixed(2));
+  };
+
+  /* ===================== B3 氢原子径向概率 ===================== */
+  var B3 = { mode:'s', r: 1.0 };
+  function b3P(x, mode){
+    if(mode==='s') return x*x*Math.exp(-2*x);
+    return x*x*x*x*Math.exp(-x);
+  }
+  var B3CLOUD = (function(){
+    function rnd(seed){
+      var s=seed;
+      return function(){ s=(s*1664525+1013904223)%4294967296; return s/4294967296; };
+    }
+    function make(mode,N){
+      var R=rnd(mode==='s'?12345:98765), out=[], xmax=mode==='s'?7:14;
+      var pmax=0, i, x;
+      for(i=0;i<=400;i++){ x=i/400*xmax; pmax=Math.max(pmax,b3P(x,mode)); }
+      var guard=0;
+      while(out.length<N && guard++<400000){
+        x=R()*xmax;
+        if(R()*pmax > b3P(x,mode)) continue;
+        var u=2*R()-1, ph=2*Math.PI*R();
+        if(mode==='p'){
+          if(R() > u*u) continue;     // cos²θ 角度分布
+        }
+        var s=Math.sqrt(Math.max(0,1-u*u));
+        out.push([x*s*Math.cos(ph), x*s*Math.sin(ph), x*u]);
+      }
+      return out;
+    }
+    return { s:make('s',1400), p:make('p',1400) };
+  })();
+  B3.draw = function(){
+    var cv=document.getElementById('cv-b3');
+    var rView = B3.mode==='s' ? 4.6 : 10.0;
+    var V = sceneView(cv, 0.44/rView);
+    var ctx=V.ctx, txt=makeTxt(ctx);
+    ctx.clearRect(0,0,V.W,V.H);
+
+    // 坐标轴与 a0 球
+    axis3(ctx,V,[0,0,1],rView*0.86,'z',COL.axis);
+    axis3(ctx,V,[1,0,0],rView*0.80,'','rgba(70,83,107,.22)');
+    ball(ctx,V,1,{stroke:'rgba(37,99,235,.25)',lw:1});
+
+    var cloud = B3.mode==='s' ? B3CLOUD.s : B3CLOUD.p;
+    var col = B3.mode==='s' ? '37,99,235' : '13,148,136';
+    for(var i=0;i<cloud.length;i++){
+      var q=prj(cloud[i],V);
+      ctx.beginPath(); ctx.arc(q[0],q[1],2.1,0,6.2832);
+      ctx.fillStyle='rgba('+col+',0.30)'; ctx.fill();
+    }
+    // 当前球壳
+    var r=B3.r;
+    if(r>0.05){
+      var circ=[];
+      for(var m=0;m<=72;m++){ var a=m/72*2*Math.PI; circ.push([r*Math.sin(75*RAD)*Math.cos(a), r*Math.sin(75*RAD)*Math.sin(a), r*Math.cos(75*RAD)]); }
+      drawCurve3(ctx,circ,{color:COL.orange,aBack:.4,aFront:.85,width:1.8,dref:r},V);
+    }
+    txt(B3.mode==='s'?'1s 态：球对称':'2p 态：两个瓣（cos²θ）', 14, 18,
+        {font:'13px '+FONT_CN, color:B3.mode==='s'?'#2563eb':'#0d9488', align:'left', haloW:5});
+    txt('橙色圈 = 当前球壳 r', 12, V.H-14, {font:'12px '+FONT_CN, color:'#7f8b9c', align:'left'});
+
+    // 归一化与累积
+    var xmax = B3.mode==='s'?7:12, pmax=0, xs=[], cum=[], acc=0, dx=xmax/600, j, x;
+    for(j=0;j<=600;j++){ x=j*dx; pmax=Math.max(pmax,b3P(x,B3.mode)); }
+    var prev=0;
+    for(j=0;j<=600;j++){
+      x=j*dx;
+      var pv=b3P(x,B3.mode)/pmax;
+      xs.push([x,pv]);
+      acc += (prev+pv)/2*dx;
+      cum.push([x,acc]);
+      prev=pv;
+    }
+    var total=acc;
+    var pin=0;
+    if(r>=xmax){ pin=cum[600][1]; }
+    else {
+      var i0=clamp(Math.floor(r/dx), 0, 600), fr=(r-i0*dx)/dx, i1=Math.min(600,i0+1);
+      pin = cum[i0][1] + (cum[i1][1]-cum[i0][1])*fr;
+    }
+    pin = pin/total;
+
+    var peakR = B3.mode==='s'?1:4;
+    setTxt('b3-peak', peakR.toFixed(1)+' a₀');
+    setTxt('b3-pin', pin.toFixed(3));
+    setTxt('b3-pr', (b3P(r,B3.mode)/pmax).toFixed(3));
+
+    plot2d(document.getElementById('ch-b3'),{
+      x0:0,x1:xmax,y0:0,y1:1.1,
+      shade:[0,r], shadeColor:'rgba(234,88,12,.10)',
+      curves:[{pts:xs,color:B3.mode==='s'?COL.blue:COL.cyan,w:2.2,fill:'rgba(37,99,235,.05)'}],
+      marks:[{x:peakR,label:'峰 '+peakR+'a₀',color:'#b6c2d2'}],
+      dot:[r, b3P(r,B3.mode)/pmax],
+      xticks:[{x:0,label:'0'},{x:peakR,label:peakR+'a₀'},{x:xmax,label:xmax+'a₀'}],
+      yticks:[{y:1,label:'峰'}],
+      xlabel:'r（单位 a₀）｜纵轴：P(r) 相对峰值'
+    });
+  };
+
+  /* ===================== C 纬度对照 ===================== */
+  var CC = { lam: 30 };
+  CC.draw = function(){
+    var cv=document.getElementById('cv-cc');
+    var V=sceneView(cv, 0.155);
+    var ctx=V.ctx, txt=makeTxt(ctx);
+    ctx.clearRect(0,0,V.W,V.H);
+
+    var sc = Math.min(V.W*0.24, V.H*0.34);
+    var L=subv(V, V.W*0.27, V.H*0.54, sc);
+    var Rr=subv(V, V.W*0.73, V.H*0.54, sc);
+    var th=(90-CC.lam)*RAD, ph=40*RAD;
+
+    // ---- 左：标准球坐标 ----
+    ctx.save();
+    ball(ctx,L,1,{});
+    grid3(ctx,L,1,0.26);
+    axis3(ctx,L,[0,0,1],1.5,'z',COL.axis);
+    axis3(ctx,L,[1,0,0],1.25,'x','rgba(70,83,107,.35)');
+    // θ 弧：极轴 → OP
+    var arc=[], i;
+    for(i=0;i<=40;i++){
+      var t=th*i/40;
+      arc.push([0.42*Math.sin(t)*Math.cos(ph), 0.42*Math.sin(t)*Math.sin(ph), 0.42*Math.cos(t)]);
+    }
+    ctx.beginPath();
+    for(i=0;i<arc.length;i++){ var q=prj(arc[i],L); i?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1]); }
+    ctx.strokeStyle=COL.cyan; ctx.lineWidth=2.2; ctx.stroke();
+    var mp=prj([0.58*Math.sin(th/2)*Math.cos(ph), 0.58*Math.sin(th/2)*Math.sin(ph), 0.58*Math.cos(th/2)],L);
+    txt('θ', mp[0], mp[1], {font:'italic 16px "Cambria Math","Times New Roman",serif', color:COL.cyan});
+    // OP
+    var O=prj([0,0,0],L), P=prj(sph2cart(1,90-CC.lam,40),L);
+    ctx.beginPath(); ctx.moveTo(O[0],O[1]); ctx.lineTo(P[0],P[1]);
+    ctx.strokeStyle='rgba(31,41,55,.85)'; ctx.lineWidth=2; ctx.stroke();
+    ctx.beginPath(); ctx.arc(P[0],P[1],4.6,0,6.2832);
+    ctx.fillStyle='#fff'; ctx.fill(); ctx.lineWidth=2.2; ctx.strokeStyle=COL.ink; ctx.stroke();
+    txt('P', P[0]+12, P[1]-11, {font:'italic 15px "Cambria Math","Times New Roman",serif', color:COL.ink});
+    // 纬线圈
+    var par=[];
+    for(i=0;i<=64;i++){ var a=i/64*2*Math.PI; par.push([Math.sin(th)*Math.cos(a), Math.sin(th)*Math.sin(a), Math.cos(th)]); }
+    drawCurve3(ctx,par,{color:COL.orange,aBack:.45,aFront:.9,width:1.8,dref:1},L);
+    txt('θ = '+(90-CC.lam)+'° 从 z 轴量', V.W*0.27, V.H*0.94, {font:'13px '+FONT_CN, color:COL.blue});
+    txt('标准球坐标', V.W*0.27, V.H*0.06, {font:'13px '+FONT_CN, color:COL.ink, base:'top'});
+    ctx.restore();
+
+    // ---- 右：地球仪纬度 ----
+    ball(ctx,Rr,1,{});
+    grid3(ctx,Rr,1,0.26);
+    axis3(ctx,Rr,[0,0,1],1.45,'',COL.axis);
+    // 赤道加粗
+    var eq=[];
+    for(i=0;i<=72;i++){ var a2=i/72*2*Math.PI; eq.push([Math.cos(a2),Math.sin(a2),0]); }
+    drawCurve3(ctx,eq,{color:'rgba(70,83,107,.55)',aBack:.4,aFront:.85,width:1.6,dref:1},Rr);
+    // 同一纬线圈（与左图逐点相同，只是换了个角度去量它）
+    var par2=[];
+    for(i=0;i<=64;i++){ var a3=i/64*2*Math.PI; par2.push([Math.sin(th)*Math.cos(a3), Math.sin(th)*Math.sin(a3), Math.cos(th)]); }
+    drawCurve3(ctx,par2,{color:COL.orange,aBack:.45,aFront:.9,width:1.8,dref:1},Rr);
+    // 纬度弧：赤道 → 该点（在 φ=40° 的竖直面内）
+    var arc2=[], lam=CC.lam*RAD;
+    for(i=0;i<=40;i++){
+      var t2=lam*i/40;
+      arc2.push([0.42*Math.cos(t2)*Math.cos(ph), 0.42*Math.cos(t2)*Math.sin(ph), 0.42*Math.sin(t2)]);
+    }
+    ctx.beginPath();
+    for(i=0;i<arc2.length;i++){ var q2=prj(arc2[i],Rr); i?ctx.lineTo(q2[0],q2[1]):ctx.moveTo(q2[0],q2[1]); }
+    ctx.strokeStyle=COL.orange; ctx.lineWidth=2.2; ctx.stroke();
+    var mp2=prj([0.60*Math.cos(lam/2)*Math.cos(ph), 0.60*Math.cos(lam/2)*Math.sin(ph), 0.60*Math.sin(lam/2)],Rr);
+    txt('λ', mp2[0], mp2[1], {font:'italic 16px "Cambria Math","Times New Roman",serif', color:COL.orange});
+    var O2=prj([0,0,0],Rr), P2=prj(sph2cart(1,90-CC.lam,40),Rr);
+    ctx.beginPath(); ctx.moveTo(O2[0],O2[1]); ctx.lineTo(P2[0],P2[1]);
+    ctx.strokeStyle='rgba(31,41,55,.85)'; ctx.lineWidth=2; ctx.stroke();
+    ctx.beginPath(); ctx.arc(P2[0],P2[1],4.6,0,6.2832);
+    ctx.fillStyle='#fff'; ctx.fill(); ctx.lineWidth=2.2; ctx.strokeStyle=COL.ink; ctx.stroke();
+    txt('P', P2[0]+12, P2[1]-11, {font:'italic 15px "Cambria Math","Times New Roman",serif', color:COL.ink});
+    txt('λ = '+CC.lam+'° 从赤道量', V.W*0.73, V.H*0.94, {font:'13px '+FONT_CN, color:COL.orange});
+    txt('地球仪纬度', V.W*0.73, V.H*0.06, {font:'13px '+FONT_CN, color:COL.ink, base:'top'});
+
+    // 中间换算（放到两球下缘之间的空处，避免压住 P 与纬线圈）
+    txt('θ = 90° − λ', V.W*0.5, V.H*0.90, {font:'14px '+FONT_CN, color:COL.ink, haloW:5});
+
+    setTxt('cc-th', (90-CC.lam)+'°');
+    setTxt('cc-rho', Math.cos(CC.lam*RAD).toFixed(3));
+    setTxt('cc-sin', Math.sin((90-CC.lam)*RAD).toFixed(3));
+  };
+
+  SCENES.a1=A1; SCENES.a2=A2; SCENES.a3=A3; SCENES.a4=A4;
+  SCENES.b1=B1; SCENES.b2=B2; SCENES.b3=B3; SCENES.cc=CC;
+
+  /* ---------- 情景交互 ---------- */
+  function bindNumRng(numId, rngId, obj, key, lo, hi, dec){
+    var num=document.getElementById(numId), rng=document.getElementById(rngId);
+    function set(v, src){
+      v = clamp(v, lo, hi);
+      if(dec===0) v=Math.round(v); else v=Math.round(v*1000)/1000;
+      obj[key]=v;
+      if(src!=='num') num.value = dec===0 ? v : v.toFixed(2);
+      if(src!=='rng') rng.value = v;
+      needsScene = true;
+    }
+    rng.addEventListener('input', function(){ set(parseFloat(this.value),'rng'); });
+    num.addEventListener('input', function(){ if(this.value!=='') set(parseFloat(this.value),'num'); });
+    num.addEventListener('blur', function(){ if(this.value===''||!isFinite(parseFloat(this.value))) set(obj[key],'x'); });
+  }
+
+  bindNumRng('a1-num','a1-rng', A1,'t', 0, 180, 0);
+  bindNumRng('a2-num','a2-rng', A2,'r', 0.4, 1.8, 2);
+  bindNumRng('a3-tnum','a3-trng', A3,'T', 100, 1500, 0);
+  bindNumRng('a3-vnum','a3-vrng', A3,'v', 0.2, 2.5, 2);
+  bindNumRng('a4-anum','a4-arng', A4,'a', 10, 80, 0);
+  bindNumRng('a4-wnum','a4-wrng', A4,'w', 0.5, 4, 1);
+  bindNumRng('b1-num','b1-rng', B1,'r', 0.15, 2.4, 2);
+  bindNumRng('b2-num','b2-rng', B2,'e', 0, 0.8, 2);
+  bindNumRng('b3-num','b3-rng', B3,'r', 0.2, 8, 1);
+  bindNumRng('cc-num','cc-rng', CC,'lam', 0, 90, 0);
+
+  document.getElementById('a1-reset').addEventListener('click', function(){ A1.t=90; document.getElementById('a1-num').value=90; document.getElementById('a1-rng').value=90; needsScene=true; });
+
+  var a2seg=document.getElementById('a2-seg');
+  a2seg.addEventListener('click', function(e){
+    var b=e.target.closest('button'); if(!b) return;
+    A2.mode=b.dataset.mode;
+    [].forEach.call(a2seg.children, function(x){ x.classList.toggle('on', x===b); });
+    needsScene=true;
+  });
+  var b3seg=document.getElementById('b3-seg');
+  b3seg.addEventListener('click', function(e){
+    var b=e.target.closest('button'); if(!b) return;
+    B3.mode=b.dataset.mode;
+    [].forEach.call(b3seg.children, function(x){ x.classList.toggle('on', x===b); });
+    needsScene=true;
+  });
+
+  document.getElementById('a4-play').addEventListener('click', function(){
+    A4.playing=!A4.playing;
+    this.textContent = A4.playing ? '❚❚ 暂停' : '▶ 播放';
+    this.classList.toggle('primary', !A4.playing);
+  });
+  document.getElementById('b2-play').addEventListener('click', function(){
+    B2.playing=!B2.playing;
+    this.textContent = B2.playing ? '❚❚ 暂停' : '▶ 播放';
+    this.classList.toggle('primary', !B2.playing);
+  });
+
+  function showScene(id){
+    activeScene = id;
+    var tabs=document.querySelectorAll('.tab');
+    for(var i=0;i<tabs.length;i++) tabs[i].classList.toggle('active', tabs[i].dataset.scene===id);
+    var els=document.querySelectorAll('.scene');
+    for(var j=0;j<els.length;j++) els[j].hidden = (els[j].id !== 'sc-'+id);
+    needsScene = true;
+  }
+  (function(){
+    var tabs=document.querySelectorAll('.tab');
+    for(var i=0;i<tabs.length;i++){
+      tabs[i].addEventListener('click', function(){ showScene(this.dataset.scene); });
+    }
+    var cvs=document.querySelectorAll('.scene-cv');
+    for(var j=0;j<cvs.length;j++) attachOrbit(cvs[j]);
+  })();
+
+  // 视角复位：主视图与所有情景共用同一台摄像机
+  var btnReset=document.getElementById('view-reset');
+  if(btnReset) btnReset.addEventListener('click', function(){
+    S.yaw = -62*RAD; S.pitch = 18*RAD; SZ.zoom = 1;
+    needsMain = true; needsScene = true;
+  });
+
+  /* ===================== 渲染调度 ===================== */
+  var needsMain = true, needsScene = true;
+  function invalidate(){ needsMain = true; needsScene = true; }
+
+  var lastFrame = 0, lastDpr = window.devicePixelRatio || 1;
+  function loop(now){
+    var dt = lastFrame ? Math.min(0.06, (now - lastFrame)/1000) : 0.016;
+    lastFrame = now;
+    // 窗口在不同缩放比例的屏幕间移动时不一定触发 resize，这里主动兜一层
+    var dprNow = window.devicePixelRatio || 1;
+    if(dprNow !== lastDpr){ lastDpr = dprNow; needsMain = true; needsScene = true; }
+    if(needsMain){ needsMain = false; drawView(); drawMag(); }
+    var sc = SCENES[activeScene];
+    if(sc){
+      var anim = sc.isPlaying && sc.isPlaying();
+      if(anim && sc.update) sc.update(dt);
+      if(needsScene || anim){ needsScene = false; sc.draw(); }
+    }
+    requestAnimationFrame(loop);
+  }
+
+  var ro = new ResizeObserver(function(){ invalidate(); });
+  ro.observe(cvView.parentElement);
+  ro.observe(cvMag.parentElement);
+  var scBoxes = document.querySelectorAll('.scene-canvas');
+  for(var b=0;b<scBoxes.length;b++) ro.observe(scBoxes[b]);
+  window.addEventListener('resize', invalidate);
+
+  renderPanel('init');
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
